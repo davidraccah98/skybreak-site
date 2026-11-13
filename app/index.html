@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skybreak — Demo</title>
+<meta name="description" content="A working demo of Skybreak: connect an account, train on challenges measured against your own tier, join contests and see every rule and every number.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0f1f'/%3E%3Cpath d='M16 30V9' stroke='%23ffd27a' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M5 12h7l4-6 4 6h7' fill='none' stroke='%23e8ecff' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #05070f; --bg2: #0b1430; --panel: #0d1428; --panel2: #121b36;
+    --ink: #eef1ff; --soft: #b7bfdf; --muted: #8790b8;
+    --beam: #ffd27a; --beam-hot: #fff3d6; --line: rgba(232,236,255,.13);
+    --good: #6ee7a8; --bad: #ff8a8a; --warn: #ffc66e; --info: #8ab4ff;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.55; }
+  a { color: var(--beam); }
+  button { font: inherit; cursor: pointer; }
+  .demo-bar { background: #2a1f05; color: var(--beam-hot); text-align: center; font-size: 13px; padding: 6px 16px; border-bottom: 1px solid rgba(255,210,122,.3); }
+  header.top { position: sticky; top: 0; z-index: 5; background: rgba(5,7,15,.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+  .top-in { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .logo { font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: var(--ink); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+  .logo i { width: 4px; height: 20px; background: var(--beam); box-shadow: 0 0 10px var(--beam); border-radius: 2px; display: inline-block; }
+  nav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+  nav a { color: var(--soft); text-decoration: none; padding: 6px 10px; border-radius: 8px; font-size: 14px; }
+  nav a.on, nav a:hover { color: var(--ink); background: var(--panel2); }
+  .wallet { font-size: 14px; color: var(--soft); white-space: nowrap; }
+  .wallet b { color: var(--beam); }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: clamp(26px, 5vw, 36px); margin: 0 0 6px; }
+  h2 { font-size: 22px; margin: 28px 0 10px; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  p { margin: 0 0 10px; }
+  .sub { color: var(--soft); margin-bottom: 20px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .card.hi { border-color: rgba(255,210,122,.45); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .between { justify-content: space-between; }
+  .btn { background: var(--beam); color: #1b1300; border: 0; border-radius: 10px; padding: 10px 16px; font-weight: 700; }
+  .btn:hover { background: var(--beam-hot); }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
+  .btn.ghost:hover { border-color: var(--beam); }
+  .btn.small { padding: 6px 10px; font-size: 13px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--soft); white-space: nowrap; }
+  .tag.easy { color: var(--good); border-color: rgba(110,231,168,.4); }
+  .tag.medium { color: var(--info); border-color: rgba(138,180,255,.4); }
+  .tag.hard { color: var(--bad); border-color: rgba(255,138,138,.45); }
+  .tag.gold { color: var(--beam); border-color: rgba(255,210,122,.45); }
+  .tag.ok { color: var(--good); } .tag.no { color: var(--bad); } .tag.wait { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  tr.you td { background: rgba(255,210,122,.07); }
+  .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  select, input[type=text] { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; font: inherit; max-width: 100%; }
+  label.fld { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .champ { width: 36px; height: 36px; border-radius: 8px; background: var(--panel2); object-fit: cover; flex: none; }
+  .champ.lg { width: 56px; height: 56px; }
+  .pairs { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); max-height: 360px; overflow: auto; padding: 2px; }
+  .pairbtn { display: flex; gap: 8px; align-items: center; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 6px; text-align: left; font-size: 14px; }
+  .pairbtn.on { border-color: var(--beam); box-shadow: 0 0 0 1px var(--beam) inset; }
+  .ch { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--panel); }
+  .ch.on { border-color: var(--beam); }
+  .levels { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .lv { border: 1px solid var(--line); background: var(--panel2); color: var(--ink); border-radius: 10px; padding: 6px 10px; font-size: 13px; text-align: left; }
+  .lv.on { border-color: var(--beam); background: rgba(255,210,122,.12); }
+  .lv[disabled] { opacity: .35; cursor: not-allowed; }
+  .lv b { display: block; font-size: 12px; }
+  .bar { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--beam); }
+  .note { border-left: 3px solid var(--beam); background: rgba(255,210,122,.06); padding: 10px 14px; border-radius: 0 10px 10px 0; color: var(--soft); margin: 14px 0; }
+  .note.warn { border-left-color: var(--warn); }
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 30px 1fr; gap: 10px; color: var(--soft); }
+  .steps li::before { content: counter(s); width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,210,122,.5); color: var(--beam); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: grid; place-items: center; padding: 16px; z-index: 20; }
+  .modal .card { max-width: 460px; width: 100%; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--beam); color: var(--ink); padding: 10px 16px; border-radius: 10px; z-index: 30; max-width: calc(100% - 32px); }
+  .kpi { font-size: 28px; font-weight: 800; }
+  .rules h2 { scroll-margin-top: 80px; }
+  .rules li { margin-bottom: 6px; color: var(--soft); }
+  .rules p { color: var(--soft); }
+  footer { max-width: 1100px; margin: 0 auto; padding: 24px 16px 40px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-size: 13px; }
+  @media (max-width: 640px) { .wallet { width: 100%; } }
+</style>
+</head>
+<body>
+  <div class="demo-bar">Demo: games, players and checks are simulated in your browser. No real money, no connection to Riot. Thresholds are the real ones, computed on <span id="games-n"></span> ranked games.</div>
+  <header class="top"><div class="top-in">
+    <a class="logo" href="#/"><i></i>Skybreak</a>
+    <nav id="nav"></nav>
+    <div class="wallet" id="wallet"></div>
+  </div></header>
+  <main id="app"></main>
+  <footer>
+    <p>Skybreak isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+    <p><a href="../">Back to skybreak.gg</a> · <a href="mailto:david@skybreak.gg">david@skybreak.gg</a></p>
+  </footer>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
