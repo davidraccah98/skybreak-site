@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skybreak — Break your ceiling</title>
+<meta name="description" content="Skybreak helps solo queue players get better and compete on their own schedule. Challenges measured against your own tier, champion and role. Coming soon on EUW.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0f1f'/%3E%3Cpath d='M16 30V9' stroke='%23ffd27a' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M5 12h7l4-6 4 6h7' fill='none' stroke='%23e8ecff' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --sky-top: #05070f;
+    --sky-mid: #0b1430;
+    --sky-low: #1a2350;
+    --ink: #eef1ff;
+    --ink-soft: #b7bfdf;
+    --ink-muted: #8790b8;
+    --beam: #ffd27a;
+    --beam-hot: #fff3d6;
+    --line: rgba(232, 236, 255, 0.14);
+    --card: rgba(255, 255, 255, 0.04);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--sky-top);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+  }
+  a { color: var(--beam); }
+
+  /* Hero: a beam of light breaking through the ceiling */
+  .hero {
+    position: relative;
+    min-height: 92vh;
+    display: grid;
+    place-items: center;
+    padding: 96px 16px 72px;
+    overflow: hidden;
+    background: radial-gradient(120% 70% at 50% 0%, var(--sky-low) 0%, var(--sky-mid) 40%, var(--sky-top) 80%);
+    text-align: center;
+  }
+  .stars, .stars::after {
+    position: absolute; inset: 0; content: "";
+    background-image:
+      radial-gradient(1px 1px at 12% 22%, #fff8 50%, transparent 51%),
+      radial-gradient(1px 1px at 28% 64%, #fff6 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 41% 14%, #fff9 50%, transparent 51%),
+      radial-gradient(1px 1px at 63% 33%, #fff7 50%, transparent 51%),
+      radial-gradient(1px 1px at 77% 71%, #fff5 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 88% 18%, #fff8 50%, transparent 51%),
+      radial-gradient(1px 1px at 9% 82%, #fff5 50%, transparent 51%),
+      radial-gradient(1px 1px at 54% 86%, #fff4 50%, transparent 51%);
+    pointer-events: none;
+  }
+  .stars::after { transform: translate(37%, 41%); opacity: .7; }
+  .beam {
+    position: absolute; left: 50%; bottom: 0; top: 0;
+    width: 6px; transform: translateX(-50%);
+    background: linear-gradient(to top, var(--beam-hot), var(--beam) 35%, rgba(255, 210, 122, 0) 100%);
+    box-shadow: 0 0 24px 6px rgba(255, 210, 122, .45), 0 0 120px 40px rgba(255, 210, 122, .12);
+    border-radius: 3px;
+    animation: rise 2.4s cubic-bezier(.2, .7, .2, 1) both;
+    pointer-events: none;
+  }
+  .ceiling {
+    position: absolute; left: 0; right: 0; top: 30%;
+    height: 2px;
+    background: linear-gradient(to right, transparent, var(--line) 15%, var(--line) 46%, transparent 49%, transparent 51%, var(--line) 54%, var(--line) 85%, transparent);
+    pointer-events: none;
+  }
+  .ceiling::before, .ceiling::after {
+    content: ""; position: absolute; top: -18px; width: 40px; height: 38px;
+    border-top: 2px solid var(--line);
+  }
+  .ceiling::before { left: calc(50% - 44px); transform: rotate(-24deg); transform-origin: right top; }
+  .ceiling::after { left: calc(50% + 4px); transform: rotate(24deg); transform-origin: left top; }
+  @keyframes rise { from { transform: translateX(-50%) scaleY(0); transform-origin: bottom; } to { transform: translateX(-50%) scaleY(1); transform-origin: bottom; } }
+  @media (prefers-reduced-motion: reduce) { .beam { animation: none; } }
+
+  .hero-inner { position: relative; max-width: 760px; padding: 28px 16px; background: radial-gradient(closest-side, rgba(5, 7, 15, .78), rgba(5, 7, 15, 0)); }
+  .brand {
+    margin: 0;
+    font-size: clamp(48px, 13vw, 112px);
+    font-weight: 900;
+    letter-spacing: .08em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .tagline {
+    margin: 18px 0 0;
+    font-size: clamp(20px, 4.6vw, 30px);
+    font-weight: 700;
+    color: var(--beam);
+    letter-spacing: .02em;
+  }
+  .lead { margin: 22px auto 0; max-width: 560px; font-size: clamp(16px, 3.6vw, 19px); color: var(--ink-soft); }
+  .badge {
+    display: inline-block; margin-top: 30px; padding: 8px 16px;
+    border: 1px solid rgba(255, 210, 122, .45); border-radius: 999px;
+    color: var(--ink); font-size: 14px; letter-spacing: .12em; text-transform: uppercase;
+    background: rgba(255, 210, 122, .06);
+  }
+
+  main { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  h2 { margin: 0 0 8px; font-size: clamp(24px, 5vw, 32px); letter-spacing: .01em; }
+  .kicker { margin: 0 0 28px; color: var(--ink-muted); font-size: 15px; letter-spacing: .14em; text-transform: uppercase; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+  .card h3 { margin: 0 0 4px; font-size: 20px; }
+  .card .tag { margin: 0 0 12px; color: var(--beam); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
+  .card p { margin: 0; color: var(--ink-soft); }
+  .card p + p { margin-top: 10px; }
+  .steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 12px; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: start; color: var(--ink-soft); }
+  .steps li::before {
+    content: counter(s); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid rgba(255, 210, 122, .5); color: var(--beam); font-weight: 700; font-size: 15px;
+  }
+  .steps strong { color: var(--ink); }
+  .story { max-width: 680px; color: var(--ink-soft); font-size: 17px; }
+  .story p { margin: 0 0 14px; }
+  .story .sign { color: var(--ink-muted); font-style: italic; }
+  .contact { text-align: center; }
+  .contact p { color: var(--ink-soft); margin: 0 0 18px; }
+  .mail {
+    display: inline-block; padding: 12px 22px; border-radius: 10px;
+    background: var(--beam); color: #1b1300; font-weight: 700; text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .mail:hover, .mail:focus-visible { background: var(--beam-hot); }
+  footer { max-width: 980px; margin: 0 auto; padding: 32px 16px 48px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: 13px; }
+  footer p { margin: 0 0 8px; }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <div class="stars" aria-hidden="true"></div>
+    <div class="ceiling" aria-hidden="true"></div>
+    <div class="beam" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <h1 class="brand">Skybreak</h1>
+      <p class="tagline">Break your ceiling.</p>
+      <p class="lead">For solo queue players who want to get better and compete, but can't commit to a team, a coach or hours of VOD review because they work or study.</p>
+      <span class="badge">Coming soon · EUW</span>
+    </div>
+  </header>
+
+  <main>
+    <section aria-labelledby="what">
+      <h2 id="what">Two ways to play above your level</h2>
+      <p class="kicker">Same player, two goals</p>
+      <div class="grid">
+        <article class="card">
+          <p class="tag">Free</p>
+          <h3>Training</h3>
+          <p>Before a game, pick 3 challenges: share of team gold, kill participation, vision lead over your lane opponent, damage taken per death, and more, each at an easy, medium or hard level.</p>
+          <p>Every challenge compares you with the average player of your own tier, champion and role. Rank says where you are. Skybreak shows how far above your level you play, and whether you keep doing it game after game.</p>
+        </article>
+        <article class="card">
+          <p class="tag">Contests</p>
+          <h3>Compete on your schedule</h3>
+          <p>No brackets, no waiting for organizers, no team to schedule. Join a contest, play your normal solo queue games whenever you want, and climb the contest leaderboard.</p>
+          <p>Because everyone is measured against their own tier, a Bronze and a Challenger player compete on equal terms. Only your own performance counts.</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="how">
+      <h2 id="how">How a game works</h2>
+      <p class="kicker">Lock in, then just play</p>
+      <ol class="steps">
+        <li><span><strong>Pick 3 challenges</strong> before the game starts.</span></li>
+        <li><span><strong>Play.</strong> No overlay, no pop-ups, nothing on screen. Just your game.</span></li>
+        <li><span><strong>Get scored automatically</strong> when the game ends, against the average player of your tier, champion and role.</span></li>
+        <li><span><strong>See your edge grow</strong> in training, or your place on the leaderboard in a contest.</span></li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="why">
+      <h2 id="why">Why we built it</h2>
+      <p class="kicker">From a player, for players</p>
+      <div class="story">
+        <p>I have played League since I was 15. I climbed to Diamond 2, in promos back when promos existed, playing at 25 fps on a computer that wasn't made for the game and without the money for a coach. I played in semi-professional teams in Italy and sat through their reviews. Then study and work took that time away. I kept playing, and today I'm way worse.</p>
+        <p>Back then a tournament was never just five games. It was hours of waiting for organizers, results and leaderboards, and very little actual gameplay. Most players are where I am today: they love the game and want to improve and compete, but they can't organize their life around it.</p>
+        <p>Skybreak is what I wanted back then, and still want today.</p>
+        <p class="sign">— the founder</p>
+      </div>
+    </section>
+
+    <section class="contact" aria-labelledby="contact">
+      <h2 id="contact">Get in touch</h2>
+      <p>Players, streamers, partners: we'd love to hear from you.</p>
+      <a class="mail" href="mailto:david@skybreak.gg">david@skybreak.gg</a>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2026 Skybreak.</p>
+    <p>Skybreak isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+  </footer>
+</body>
+</html>
