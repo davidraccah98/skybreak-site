@@ -1,8 +1,10 @@
-// Skybreak demo. Three areas: public (sign in, create account), the free area (home, match history,
-// training, milestones) and the contest area (wallet, contests, sign-ups, leaderboards).
+// Skybreak demo, built on docs/APP.md. Two areas of equal weight:
+//  - Personal (free, basic account): Home, Intelligence, Training. A training sign-up locks a champion and role;
+//    the game is judged on every challenge of the pair and enters a free improvement contest of 20.
+//  - Contests (prizes, verified account): Lobby, Join (pair + 3 challenges), My contests, Contest, Wallet.
 // The 5 accounts are real EUW players (invented names): their games and challenge values are real, and the
 // thresholds are the real v2 catalog with its tier correction. Checks reveal the account's next real game;
-// other contest players and the clock are simulated. Everything is kept only in this browser.
+// other players, the clock, the money and the improvement numbers are simulated. Kept only in this browser.
 'use strict';
 const D = window.SKY;
 const PROFILES = window.PROFILES;
@@ -10,6 +12,7 @@ const ADJ = window.ADJUST;
 const $ = (s, el = document) => el.querySelector(s);
 const app = $('#app');
 const LEVELS = ['easy', 'medium', 'hard'];
+const LV = { easy: 'E', medium: 'M', hard: 'H' };
 const LEVEL_Q = { easy: 0.40, medium: 0.65, hard: 0.85 }; // share of games below each line (60/35/15% reach it)
 const POINTS = { easy: D.levels.easy.points, medium: D.levels.medium.points, hard: D.levels.hard.points };
 const TARGET = { easy: D.levels.easy.target, medium: D.levels.medium.target, hard: D.levels.hard.target };
@@ -19,21 +22,21 @@ const tierName = (t) => t[0] + t.slice(1).toLowerCase();
 const CH = Object.fromEntries(D.challenges.map((c) => [c.id, c]));
 const PRIZE_X = [2, 1.7, 1.5, 1.2, 1, 1, 1, 1, 1, 1, 1, 1, 0.8, 0.8, 0, 0, 0, 0, 0, 0];
 const SEATS = 20;
-const TICKETS = [0, 200, 500, 1000];
+const TICKETS = [200, 500, 1000];
 const HOUR = 3600e3;
 const DAY = 24 * HOUR;
 const START_BALANCE = 2000;
 const PAST_SHARE = 0.7; // the account's older games are its history; the newer ones are revealed by checks
 
 // ---------- state ----------
-const KEY = 'skybreak-demo-v2';
+const KEY = 'skybreak-demo-v3';
 let S;
-function fresh() {
-  return { profile: null, signupForm: null, verified: false, balance: START_BALANCE, points: 0, now: Date.now(), lastCheck: Date.now(), cursor: 0, signups: [], games: [], contests: {}, milestones: [], seq: 1, seeded: false };
+function fresh(keep = {}) {
+  return { profile: null, signupForm: null, verified: false, balance: 0, now: Date.now(), lastCheck: Date.now(), cursor: 0, signups: [], games: [], contests: {}, imp: {}, milestones: [], ledger: [], seq: 1, area: 'personal', guide: { open: false, step: 0 }, ...keep };
 }
 function load() {
   try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch { S = fresh(); }
-  if (!S.contests) S = fresh();
+  if (!S.imp || !S.guide) S = fresh();
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* private mode: works until reload */ } }
 const uid = (p) => `${p}${S.seq++}`;
@@ -44,7 +47,7 @@ const rnd = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
 const pick = (a) => a[Math.floor(rnd() * a.length)];
 const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-9)) * Math.cos(2 * Math.PI * rnd());
 
-// ---------- catalog: thresholds with the tier correction ----------
+// ---------- catalog: thresholds with the tier correction (unchanged algorithm) ----------
 const pairKeys = Object.keys(D.pairs).sort((a, b) => D.champions[a.split('|')[1]].localeCompare(D.champions[b.split('|')[1]]));
 const splitPair = (k) => { const [role, champ] = k.split('|'); return { role, champ }; };
 const champName = (c) => D.champions[c] || c;
@@ -68,7 +71,7 @@ function anchors(pair, id, win, tier) {
   else slope = isCount(id) ? 4 : Math.max(Math.abs(known[0][1]) * 1.2, 0.05);
   return { known, slope };
 }
-/** Value at quantile u of the pair's distribution, through the known lines: used for simulated players only. */
+/** Value at quantile u of the pair's distribution, through the known lines. */
 function valueAt(pair, id, win, u, tier) {
   const { known, slope } = anchors(pair, id, win, tier);
   let v;
@@ -83,6 +86,13 @@ function valueAt(pair, id, win, u, tier) {
   if (CH[id].format === 'percent') v = Math.max(0, Math.min(1, v));
   if (CH[id].format === 'share-max') v = Math.max(-1, Math.min(0, v));
   return v;
+}
+/** Position 0-100 of a value among the players of the tier with that pair (inverse of valueAt). */
+function position(pair, id, value, win, tier) {
+  const first = (test) => { let lo = 0.005, hi = 0.995; if (test(lo)) return lo; if (!test(hi)) return hi; for (let k = 0; k < 18; k++) { const m = (lo + hi) / 2; if (test(m)) hi = m; else lo = m; } return hi; };
+  const a = first((u) => valueAt(pair, id, win, u, tier) >= value);
+  const b = first((u) => valueAt(pair, id, win, u, tier) > value);
+  return Math.max(1, Math.min(99, Math.round(((a + b) / 2) * 100)));
 }
 function lowLine(pair, id, level, win, tier) {
   const hi = lineOf(pair, id, level, win, tier);
@@ -112,6 +122,11 @@ function fmt(id, v) {
   if (f === 'amount') return v >= 999999 ? 'no deaths' : `${Math.round(v / 100) * 100}`;
   return String(v);
 }
+function lineText(pair, id, level, tier) {
+  const v = (offersOf(pair)[id] || [])[LEVELS.indexOf(level)];
+  if (v == null) return null;
+  return Array.isArray(v) ? `${fmt(id, lineOf(pair, id, level, true, tier))} win · ${fmt(id, lineOf(pair, id, level, false, tier))} loss` : fmt(id, lineOf(pair, id, level, true, tier));
+}
 function yValue(pair, id, key, x) {
   const src = (D.ySources[id] || {})[key];
   if (!src) return null;
@@ -125,60 +140,76 @@ function challengeText(pair, id, level, tier) {
   return CH[id].text.replace('{x}', `<b>${fmt(id, x)}</b>`).replace('{xl}', `<b>${fmt(id, xl)}</b>`)
     .replace('{y10}', yValue(pair, id, 'y10', x) ?? '—').replace('{y20}', yValue(pair, id, 'y20', x) ?? '—').replace('{y30}', yValue(pair, id, 'y30', x) ?? '—');
 }
-const euro = (c) => `${(c / 100).toFixed(c % 100 ? 2 : 0).replace('.', ',')} €`;
+const euro = (c) => `${(c / 100).toFixed(c % 100 ? 2 : 0)} €`;
+const euro2 = (c) => `${(c / 100).toFixed(2)} €`;
 const when = (t) => new Date(t).toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+const clock = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 const day = (t) => new Date(t).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 const esc = (s) => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 const pct = (x) => `${Math.round(x * 100)}%`;
+const signed = (x) => (x == null ? '—' : `${x > 0 ? '+' : x < 0 ? '−' : '±'}${Math.abs(x)}`);
+const ord = (n) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
+const num = (id) => id.replace(/^\D+/, '');
+const rl = (sec, text = 'Rule') => `<a class="rl" href="#/rules/${sec}">${text} ›</a>`;
 
-// ---------- the account's own record: how often it beats its tier ----------
-/** The level a challenge is measured at in the profile: medium where offered, otherwise the one there is. */
-function refLevel(pair, id) {
-  const o = offersOf(pair)[id];
-  if (!o) return null;
-  return o[1] != null ? 'medium' : o[0] != null ? 'easy' : 'hard';
-}
-/** Per pair, challenge and level: games judged and games made, on the account's tier lines. */
-function record(games, tier) {
-  const r = {};
-  for (const g of games) {
-    for (const id of Object.keys(offersOf(g.pair))) {
-      const v = g.v[id];
-      if (v == null) continue;
-      for (const level of LEVELS) {
-        const line = lineOf(g.pair, id, level, g.win, tier);
-        if (line == null) continue;
-        const k = `${g.pair}#${id}#${level}`;
-        const t = r[k] || (r[k] = { pair: g.pair, id, level, n: 0, hits: 0 });
-        t.n++; if (v >= line) t.hits++;
-      }
-    }
+// ---------- judging a game on every challenge of its pair ----------
+function analyse(g) {
+  const tier = P().tier;
+  g.pos = {}; g.reach = {};
+  let sum = 0, n = 0, above = 0;
+  for (const id of Object.keys(offersOf(g.pair))) {
+    const v = g.v[id];
+    if (v == null) continue;
+    const p = position(g.pair, id, v, g.win, tier);
+    g.pos[id] = p; sum += p; n++; if (p > 50) above++;
+    let lv = null;
+    for (const l of LEVELS) { const line = lineOf(g.pair, id, l, g.win, tier); if (line != null && v >= line) lv = l; }
+    g.reach[id] = lv;
   }
-  return r;
+  Object.assign(g, { mean: n ? sum / n : 50, above, of: n, analysed: true });
 }
-const myGames = () => S.games;
+/** Demo only: the improvement formula is not final (docs/APP.md). Mean position against the tier (50) and against
+ *  the account's last 10 training games on the same champion, the same role and the same pair. */
+function improvement(g) {
+  const prior = S.games.filter((x) => x.analysed && x.kind === 'training' && x.start < g.start && x.id !== g.id);
+  const { champ, role } = splitPair(g.pair);
+  const base = (f) => { const l = prior.filter(f).sort((a, b) => b.start - a.start).slice(0, 10); return l.length >= 3 ? l.reduce((a, x) => a + x.mean, 0) / l.length : null; };
+  const r = { tier: g.mean - 50, champ: base((x) => splitPair(x.pair).champ === champ), role: base((x) => splitPair(x.pair).role === role), pair: base((x) => x.pair === g.pair) };
+  for (const k of ['champ', 'role', 'pair']) if (r[k] != null) r[k] = g.mean - r[k];
+  const vals = Object.values(r).filter((v) => v != null);
+  for (const k of Object.keys(r)) if (r[k] != null) r[k] = Math.round(r[k]);
+  r.total = Math.round(vals.reduce((a, v) => a + v, 0) / vals.length);
+  g.imp = r;
+}
+const analysed = () => S.games.filter((g) => g.analysed);
+/** Per pair, challenge and level: games judged and games made, on the account's tier lines (for contest picks). */
 let recCache = null;
 function rec() {
   const k = `${S.profile}:${S.games.length}`;
-  if (!recCache || recCache.k !== k) recCache = { k, r: record(myGames(), P().tier) };
-  return recCache.r;
+  if (recCache && recCache.k === k) return recCache.r;
+  const r = {}, tier = P().tier;
+  for (const g of analysed()) for (const id of Object.keys(g.pos)) for (const level of LEVELS) {
+    const line = lineOf(g.pair, id, level, g.win, tier);
+    if (line == null) continue;
+    const key = `${g.pair}#${id}#${level}`;
+    const t = r[key] || (r[key] = { n: 0, hits: 0 });
+    t.n++; if (g.v[id] >= line) t.hits++;
+  }
+  recCache = { k, r };
+  return r;
 }
 function mains() {
   const n = {};
-  for (const g of myGames()) n[g.pair] = (n[g.pair] || 0) + 1;
+  for (const g of analysed()) n[g.pair] = (n[g.pair] || 0) + 1;
   return Object.entries(n).sort((a, b) => b[1] - a[1]).map(([pair, games]) => ({ pair, games }));
 }
-/** Edge per challenge on one pair (or all pairs): made minus expected, over games judged, at the reference level. */
-function edges(pair) {
-  const r = rec();
-  const by = {};
-  for (const t of Object.values(r)) {
-    if (pair && t.pair !== pair) continue;
-    if (t.level !== refLevel(t.pair, t.id)) continue;
-    const e = by[t.id] || (by[t.id] = { id: t.id, n: 0, hits: 0, expected: 0, level: t.level });
-    e.n += t.n; e.hits += t.hits; e.expected += TARGET[t.level] * t.n;
-  }
-  return Object.values(by).filter((e) => e.n >= 8).map((e) => ({ ...e, you: e.hits / e.n, avg: e.expected / e.n, edge: (e.hits - e.expected) / e.n })).sort((a, b) => b.edge - a.edge);
+/** Per challenge on one pair: mean position minus 50, games, and the last 10 positions. */
+function profileOf(pair) {
+  const gs = analysed().filter((g) => g.pair === pair).sort((a, b) => a.start - b.start);
+  return Object.keys(offersOf(pair)).map((id) => {
+    const ps = gs.filter((g) => g.pos[id] != null).map((g) => g.pos[id]);
+    return { id, n: ps.length, delta: ps.length ? Math.round(ps.reduce((a, x) => a + x, 0) / ps.length - 50) : null, last: ps.slice(-10) };
+  }).filter((e) => e.n > 0).sort((a, b) => b.delta - a.delta);
 }
 
 // ---------- tips per challenge, by tier band ----------
@@ -201,8 +232,15 @@ const TIPS = {
 const band = (t) => (t === 'GOLD' || t === 'PLATINUM' ? 0 : t === 'MASTER' ? 2 : 1);
 const tip = (id) => TIPS[id]?.[band(P().tier)] ?? '';
 
-// ---------- simulated other players ----------
-const NAMES = ['Nightglass', 'Kaeru', 'Velmora', 'Tidecaller', 'Ashfang', 'Orrin', 'Sablewing', 'Quietstorm', 'Brisa', 'Halcyon', 'Mirelle', 'Jotun', 'Pyrelight', 'Zephra', 'Tamsin', 'Coldiron', 'Wren', 'Saffi', 'Ondine', 'Brokenhalo', 'Grimsby', 'Kestrel', 'Novaline', 'Thistle', 'Umbral', 'Vesper', 'Yarrow', 'Fenwick'];
+// ---------- money ----------
+function money(kind, amount, contestId, at = S.now) {
+  S.balance += amount;
+  S.ledger.push({ at, kind, amount, contestId: contestId || null });
+}
+
+// ---------- simulated other players and contests ----------
+const NAMES = ['Nightglass', 'Kaeru', 'Velmora', 'Tidecaller', 'Ashfang', 'Orrin', 'Sablewing', 'Quietstorm', 'Brisa', 'Halcyon', 'Mirelle', 'Jotun', 'Pyrelight', 'Zephra', 'Tamsin', 'Coldiron', 'Wren', 'Saffi', 'Ondine', 'Brokenhalo', 'Grimsby', 'Kestrel', 'Novaline', 'Thistle', 'Umbral', 'Vesper', 'Yarrow', 'Fenwick', 'Morrow', 'Quill'];
+const botName = () => `${pick(NAMES)}#${String(Math.floor(rnd() * 900) + 100)}`;
 function randomPicks(pair) {
   const offers = Object.entries(offersOf(pair)).flatMap(([id, lv]) => lv.map((v, i) => (v == null ? null : { id, level: LEVELS[i] })).filter(Boolean));
   const out = [];
@@ -215,102 +253,167 @@ function randomPicks(pair) {
 function botEntry(at) {
   const pair = pick(pairKeys), tier = pick(TIERS), picks = randomPicks(pair), win = rnd() < 0.5, skill = (rnd() - 0.5) * 0.1;
   const results = picks.map((p) => { const value = valueAt(pair, p.id, win, Math.max(0.001, Math.min(0.999, rnd() + skill + gauss() * 0.03)), tier); return { ...p, value, ...score(pair, p, value, win, tier) }; });
-  return { name: `${pick(NAMES)}#${String(Math.floor(rnd() * 900) + 100)}`, tier, pair, at, win, results, total: Math.round(results.reduce((a, r) => a + r.points, 0) * 10) / 10, you: false };
+  return { name: botName(), tier, pair, at, win, results, total: Math.round(results.reduce((a, r) => a + r.points, 0) * 10) / 10, you: false };
 }
-function newContest(ticket, at) {
-  const id = uid('C');
-  S.contests[id] = { id, ticket, createdAt: at, state: 'open', entries: [] };
-  return S.contests[id];
+const impBot = (at) => ({ name: botName(), tier: pick(TIERS), pair: pick(pairKeys), at, total: Math.round(gauss() * 6 + 1), you: false });
+function newContest(kind, ticket, at) {
+  const id = uid(kind === 'imp' ? 'I' : 'C');
+  const c = { id, kind, ticket, createdAt: at, state: 'open', entries: [] };
+  (kind === 'imp' ? S.imp : S.contests)[id] = c;
+  return c;
 }
-function seedContests() {
-  if (S.seeded) return;
-  for (const t of TICKETS) for (let k = 0; k < 2; k++) {
-    const c = newContest(t, S.now - (k + 1) * 5 * HOUR);
-    const n = k === 0 ? 8 + Math.floor(rnd() * 8) : SEATS;
-    for (let i = 0; i < n; i++) addEntry(c, botEntry(c.createdAt + i * 20 * 60e3), true);
-  }
-  S.seeded = true;
-}
-function settle(c, quiet) {
-  const ranked = [...c.entries].sort((a, b) => b.total - a.total || a.at - b.at);
+const allContests = () => [...Object.values(S.contests), ...Object.values(S.imp)];
+const findContest = (id) => S.contests[id] || S.imp[id];
+/** Places with ties: tied players share the place (and, in prize contests, the prizes of the places they hold). */
+function ranked(c) {
+  const rows = [...c.entries].sort((a, b) => b.total - a.total || a.at - b.at);
   let i = 0;
-  while (i < ranked.length) {
+  while (i < rows.length) {
     let j = i;
-    while (j + 1 < ranked.length && ranked[j + 1].total === ranked[i].total) j++;
-    const sum = PRIZE_X.slice(i, j + 1).reduce((a, x) => a + x * c.ticket, 0);
-    for (let k = i; k <= j; k++) { ranked[k].place = i + 1; ranked[k].prize = Math.round(sum / (j - i + 1)); }
+    while (j + 1 < rows.length && rows[j + 1].total === rows[i].total) j++;
+    const sum = c.ticket ? PRIZE_X.slice(i, j + 1).reduce((a, x) => a + x * c.ticket, 0) : 0;
+    for (let k = i; k <= j; k++) { rows[k]._place = i + 1; rows[k]._tie = j > i; rows[k]._prize = Math.round(sum / (j - i + 1)); }
     i = j + 1;
   }
-  Object.assign(c, { entries: ranked, state: 'done', pool: c.ticket * SEATS * 0.8, closedAt: S.now });
-  const me = ranked.find((e) => e.you);
-  if (me && !quiet) {
-    if (me.prize) { S.balance += me.prize; toast(`Contest finished: you placed ${me.place}° and won ${euro(me.prize)}.`); } else toast(`Contest finished: you placed ${me.place}°.`);
-  }
+  return rows;
+}
+function settle(c, quiet) {
+  const rows = ranked(c);
+  for (const e of rows) { e.place = e._place; e.prize = e._prize; }
+  Object.assign(c, { entries: rows, state: 'done', pool: c.ticket * SEATS * 0.8, closedAt: S.now });
+  const me = rows.find((e) => e.you);
+  if (!me) return;
+  if (me.prize) money('prize', me.prize, c.id);
+  if (!quiet) toast(c.kind === 'imp' ? `Improvement contest #${num(c.id)} finished: you placed ${ord(me.place)}.` : `Contest #${num(c.id)} finished: ${ord(me.place)}${me.prize ? `, ${euro2(me.prize)} credited to your wallet` : ''}.`);
 }
 function addEntry(c, e, quiet) { c.entries.push(e); if (c.entries.length >= SEATS) settle(c, quiet); }
 function botsArrive(hours) {
-  for (const c of Object.values(S.contests)) {
+  for (const c of allContests()) {
     if (c.state !== 'open') continue;
     const n = Math.min(SEATS - c.entries.length, Math.floor(rnd() * 2 + hours * (0.25 + rnd() * 0.4)));
-    for (let i = 0; i < n && c.state === 'open'; i++) addEntry(c, botEntry(S.now - rnd() * hours * HOUR));
+    for (let i = 0; i < n && c.state === 'open'; i++) addEntry(c, c.kind === 'imp' ? impBot(S.now - rnd() * hours * HOUR) : botEntry(S.now - rnd() * hours * HOUR));
   }
-  for (const t of TICKETS) if (!Object.values(S.contests).some((c) => c.ticket === t && c.state === 'open')) newContest(t, S.now);
+  for (const t of TICKETS) if (!Object.values(S.contests).some((c) => c.ticket === t && c.state === 'open')) newContest('prize', t, S.now);
+  if (!Object.values(S.imp).some((c) => c.state === 'open')) newContest('imp', 0, S.now);
+}
+/** The open contest of that kind and ticket where the player is not yet, the fullest first; or a new one. */
+function enter(kind, ticket, at) {
+  const pool = Object.values(kind === 'imp' ? S.imp : S.contests);
+  const c = pool.filter((x) => x.state === 'open' && x.ticket === ticket && !x.entries.some((e) => e.you)).sort((a, b) => b.entries.length - a.entries.length)[0];
+  return c ? { c, opened: false } : { c: newContest(kind, ticket, at), opened: true };
 }
 
-// ---------- the check ----------
-/** The account's next real game; once they are all shown, one of its real games again. */
+// ---------- signing in: the account's history and a few past contests ----------
+function signIn(i) {
+  S = fresh({ signupForm: S.signupForm, guide: S.guide });
+  S.profile = i;
+  const all = PROFILES[i].games;
+  const past = Math.floor(all.length * PAST_SHARE);
+  const shift = S.now - DAY - all[past - 1].start; // real results; dates moved so the last game was yesterday
+  money('deposit', START_BALANCE, null, S.now - 3 * DAY);
+  for (let k = 0; k < past; k++) {
+    const r = all[k];
+    const g = { id: `H${k}`, pair: r.pair, win: r.win, minutes: r.minutes, v: r.v, start: r.start + shift, kind: 'training', note: 'Training game (demo history).', signup: null };
+    analyse(g); S.games.push(g); improvement(g);
+  }
+  const hist = S.games;
+  // two finished improvement contests and one open, with the account's training games
+  for (const [k, done] of [[past - 16, true], [past - 9, true], [past - 1, false]]) {
+    const g = hist[k];
+    if (!g) continue;
+    const c = newContest('imp', 0, g.start - 6 * HOUR);
+    const n = done ? SEATS - 1 : 11;
+    for (let b = 0; b < n; b++) addEntry(c, impBot(c.createdAt + b * 25 * 60e3), true);
+    addEntry(c, { name: P().name, tier: P().tier, pair: g.pair, at: g.start, total: g.imp.total, you: true }, true);
+    g.contestId = c.id;
+    g.note = `Training game: entered improvement contest #${num(c.id)}.`;
+  }
+  // one finished 2 € contest with one of the account's games
+  const cg = hist[past - 5];
+  if (cg) {
+    cg.kind = 'contest';
+    // demo: the 3 challenges this player would have locked are the ones they are strongest at on this pair
+    cg.picks = Object.keys(cg.pos).sort((a, b) => cg.pos[b] - cg.pos[a]).slice(0, 3)
+      .map((id) => ({ id, level: cg.reach[id] || LEVELS.find((l, i) => offersOf(cg.pair)[id][i] != null) }));
+    cg.results = cg.picks.map((p) => { const value = cg.v[p.id] ?? valueAt(cg.pair, p.id, cg.win, 0.5, P().tier); return { ...p, value, ...score(cg.pair, p, value, cg.win, P().tier) }; });
+    cg.total = Math.round(cg.results.reduce((a, r) => a + r.points, 0) * 10) / 10;
+    const c = newContest('prize', 200, cg.start - 5 * HOUR);
+    for (let b = 0; b < SEATS - 1; b++) c.entries.push(botEntry(c.createdAt + b * 20 * 60e3));
+    money('ticket', -200, c.id, cg.start);
+    S.now = cg.start + 4 * HOUR;
+    addEntry(c, { name: P().name, tier: P().tier, pair: cg.pair, at: cg.start, win: cg.win, results: cg.results, total: cg.total, you: true }, true);
+    S.now = Date.now();
+    cg.contestId = c.id;
+    cg.note = `Contest game: entered 2 € contest #${num(c.id)}.`;
+  }
+  // the other contests running now
+  for (const t of TICKETS) for (let k = 0; k < 2; k++) {
+    const c = newContest('prize', t, S.now - (k + 1) * 5 * HOUR);
+    const n = k === 0 ? 8 + Math.floor(rnd() * 9) : SEATS;
+    for (let b = 0; b < n; b++) addEntry(c, botEntry(c.createdAt + b * 20 * 60e3), true);
+  }
+  S.cursor = past;
+  save();
+  location.hash = '#/home';
+}
+
+// ---------- the check (same rules for training and contests) ----------
 function nextRealGame() {
   const all = P().games;
   const g = S.cursor < all.length ? all[S.cursor++] : pick(all.slice(0, Math.floor(all.length * PAST_SHARE)));
   return { pair: g.pair, win: g.win, minutes: g.minutes, v: g.v };
 }
 const active = (s) => s.status === 'waiting' || s.status === 'unlocking';
-/** Finds the games played since the last check and applies the rules, as the real check will. */
-function runCheck({ daily = false, short = false } = {}) {
+function runCheck({ endOfDay = false, short = false } = {}) {
   const from = S.lastCheck;
-  const elapsed = daily ? DAY : short ? (5 + rnd() * 25) * 60e3 : (2 + rnd() * 4) * HOUR;
+  const elapsed = endOfDay ? 10 * HOUR : short ? (5 + rnd() * 25) * 60e3 : (2 + rnd() * 4) * HOUR;
   S.now += elapsed;
   const to = S.now;
-  const n = short ? (rnd() < 0.3 ? 1 : 0) : daily ? 2 + Math.floor(rnd() * 3) : 1 + Math.floor(rnd() * 2);
+  const n = short ? (rnd() < 0.3 ? 1 : 0) : endOfDay ? 1 + Math.floor(rnd() * 3) : 1 + Math.floor(rnd() * 2);
   const found = [];
   const span = (to - from) * 0.8; // games start in the window since the last check and end before this one
   for (let k = 0; k < n; k++) found.push({ ...nextRealGame(), start: from + ((k + 0.3 + rnd() * 0.5) / n) * span });
+  const tier = P().tier;
   for (const f of found) {
-    const g = { id: uid('G'), ...f, note: '', signup: null, checked: to };
+    const g = { id: uid('G'), ...f, note: '', signup: null, checked: to, kind: 'none' };
     const s = S.signups.filter((x) => active(x) && x.pair === f.pair && x.at < f.start && (x.status !== 'unlocking' || f.start < x.unlockAsked)).sort((a, b) => a.at - b.at)[0];
     if (!s) {
       const sameChamp = S.signups.some((x) => active(x) && splitPair(x.pair).champ === splitPair(f.pair).champ);
-      g.note = sameChamp ? 'Same champion, different role: the pair must match exactly. Your sign-up keeps waiting.' : 'No sign-up waiting for this champion and role: judged for your profile only.';
+      g.note = sameChamp ? 'Same champion, different role: the pair must match exactly. Your sign-up keeps waiting.' : 'Not signed up: not analysed.';
+      g.v = null; g.analysed = false;
+      S.games.push(g);
+      continue;
+    }
+    s.status = 'played'; s.gameId = g.id; g.signup = s.id;
+    analyse(g);
+    if (s.kind === 'training') {
+      g.kind = 'training';
+      S.games.push(g);
+      improvement(g);
+      const { c, opened } = enter('imp', 0, f.start);
+      s.contestId = c.id; g.contestId = c.id;
+      g.note = `Judged on all ${g.of} challenges of ${pairLabel(g.pair)}. ${opened ? 'Opened' : 'Entered'} improvement contest #${num(c.id)}.`;
+      addEntry(c, { name: P().name, tier, pair: f.pair, at: f.start, total: g.imp.total, you: true });
     } else {
-      const results = s.picks.map((p) => {
-        const value = f.v[p.id] ?? valueAt(f.pair, p.id, f.win, 0.5, P().tier);
-        return { ...p, value, ...score(f.pair, p, value, f.win, P().tier) };
-      });
-      Object.assign(g, { results, total: Math.round(results.reduce((a, r) => a + r.points, 0) * 10) / 10, signup: s.id });
-      s.status = 'played'; s.gameId = g.id;
-      if (s.kind === 'training') g.note = 'Training game: judged and added to your record.';
-      else {
-        S.balance -= s.ticket;
-        let c = Object.values(S.contests).filter((x) => x.state === 'open' && x.ticket === s.ticket && !x.entries.some((e) => e.you)).sort((a, b) => b.entries.length - a.entries.length)[0];
-        const opened = !c;
-        if (!c) c = newContest(s.ticket, f.start);
-        s.contestId = c.id;
-        g.note = `${opened ? 'Opened a new contest' : 'Entered a contest'}${s.ticket ? `: ticket ${euro(s.ticket)} taken from your balance` : ''}.`;
-        addEntry(c, { name: P().name, tier: P().tier, pair: f.pair, at: f.start, win: f.win, results, total: g.total, you: true });
-        for (const o of S.signups) if (active(o) && o.kind === 'contest' && o.ticket > S.balance) { o.status = 'removed'; o.note = 'Removed: your balance no longer covers this ticket. Nothing was charged.'; }
-      }
+      g.kind = 'contest';
+      g.picks = s.picks;
+      g.results = s.picks.map((p) => { const value = f.v[p.id] ?? valueAt(f.pair, p.id, f.win, 0.5, tier); return { ...p, value, ...score(f.pair, p, value, f.win, tier) }; });
+      g.total = Math.round(g.results.reduce((a, r) => a + r.points, 0) * 10) / 10;
+      S.games.push(g);
+      const { c, opened } = enter('prize', s.ticket, f.start);
+      money('ticket', -s.ticket, c.id, f.start);
+      s.contestId = c.id; g.contestId = c.id;
+      g.note = `${opened ? 'Opened' : 'Entered'} ${euro(s.ticket)} contest #${num(c.id)}: ticket taken from your balance.`;
+      addEntry(c, { name: P().name, tier, pair: f.pair, at: f.start, win: f.win, results: g.results, total: g.total, you: true });
+      for (const o of S.signups) if (active(o) && o.kind === 'contest' && o.ticket > S.balance) { o.status = 'removed'; o.note = 'Removed: your balance no longer covers this ticket. Nothing was charged.'; }
     }
     for (const m of S.milestones) {
       if (m.status !== 'active' || m.pair !== f.pair || f.v[m.id] == null) continue;
-      if (f.v[m.id] >= lineOf(m.pair, m.id, m.level, f.win, P().tier)) {
-        m.done++;
-        if (m.done >= m.target) { m.status = 'reached'; m.reachedAt = to; S.points += m.points; toast(`Milestone reached: +${m.points} points.`); }
-      }
+      if (f.v[m.id] >= lineOf(m.pair, m.id, m.level, f.win, tier)) { m.done++; if (m.done >= m.target) { m.status = 'reached'; m.reachedAt = to; toast('Milestone reached.'); } }
     }
-    S.games.push(g);
   }
-  for (const s of S.signups) if (s.status === 'unlocking' && S.now >= s.unlockAt) { s.status = 'unlocked'; s.note = 'Unlocked: no valid game started before your request. Nothing was charged.'; }
-  if (daily) for (const s of S.signups) if (s.status === 'waiting') { s.status = 'removed'; s.note = 'Removed by the daily check: not played. Nothing was charged.'; }
+  for (const s of S.signups) if (s.status === 'unlocking' && S.now >= s.unlockAt) { s.status = 'unlocked'; s.note = 'Unlocked: no valid game started before your request.'; }
+  if (endOfDay) for (const s of S.signups) if (s.status === 'waiting') { s.status = 'removed'; s.note = 'Removed at the end of the day: not played. Nothing was charged.'; }
   botsArrive(elapsed / HOUR);
   S.lastCheck = to;
   save();
@@ -320,7 +423,7 @@ function unlock(s) {
   const n = runCheck({ short: true });
   if (s.status === 'played') { toast(`The check found your game${n > 1 ? 's' : ''}: it entered the contest, so the unlock does not apply.`); return; }
   if (rnd() < 0.15) { s.note = 'Unlock refused: you were in a game at that moment. Try again when it ends.'; save(); toast('You are in a game right now: unlock refused.'); return; }
-  Object.assign(s, { status: 'unlocking', unlockAsked: S.now, unlockAt: S.now + HOUR, note: `Unlock requested ${when(S.now)}: it takes effect at ${when(S.now + HOUR)} if no valid game started before the request.` });
+  Object.assign(s, { status: 'unlocking', unlockAsked: S.now, unlockAt: S.now + HOUR, note: `Unlock requested at ${clock(S.now)}: it takes effect at ${clock(S.now + HOUR)} if no valid game started before the request.` });
   save(); toast('Unlock requested: it takes effect in 1 hour.');
 }
 
@@ -331,26 +434,39 @@ function toast(msg) {
   if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
   t.textContent = msg;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.remove(), 4200);
+  toastTimer = setTimeout(() => t.remove(), 4600);
 }
-const area = (route) => (['contests', 'join', 'contest', 'verify'].includes(route) ? 'contest' : ['signin', 'signup'].includes(route) ? 'public' : 'free');
+const PERSONAL = ['home', 'intel', 'train'];
+const CONTEST = ['contests', 'join', 'mine', 'contest', 'wallet', 'verify'];
+const PUBLIC = ['signin', 'signup', 'link'];
+function areaOf(route) {
+  if (S.profile == null) return 'public';
+  if (PERSONAL.includes(route)) return 'personal';
+  if (CONTEST.includes(route)) return 'contest';
+  return S.area || 'personal';
+}
 function chrome(route) {
   const h = location.hash || '#/';
-  const a = S.profile == null ? 'public' : area(route);
+  const a = areaOf(route);
+  if (a !== 'public') S.area = a;
   document.body.dataset.area = a;
-  const link = ([href, name]) => `<a href="${href}" class="${h === href || (href.length > 2 && h.startsWith(href)) ? 'on' : ''}">${name}</a>`;
-  let nav = '', right = '';
+  const link = ([href, name]) => `<a href="${href}" class="${h === href || h.startsWith(`${href}/`) ? 'on' : ''}">${name}</a>`;
+  let html;
   if (a === 'public') {
-    nav = [['#/rules', 'Rules'], ['#/data', 'Your data']].map(link).join('');
-    right = '<a class="btn ghost small" href="#/signin">Sign in</a><a class="btn small" href="#/signup">Create account</a>';
-  } else if (a === 'free') {
-    nav = [['#/home', 'Home'], ['#/history', 'Match history'], ['#/train', 'Training'], ['#/milestones', 'Milestones'], ['#/rules', 'Rules']].map(link).join('');
-    right = `<span class="pts" title="Skybreak points from milestones">${S.points} pts</span><a class="btn small" href="#/contests">Contest area</a>`;
+    html = `<a class="logo" href="../"><i></i>Skybreak</a><nav class="areanav pub">${[['#/rules', 'Rules']].map(link).join('')}</nav>
+    <div class="right"><a class="btn ghost small" href="#/signin">Sign in</a><a class="btn small" href="#/signup">Create account</a></div>`;
   } else {
-    nav = [['#/contests', 'Contests'], ['#/rules', 'Rules'], ['#/data', 'Your data']].map(link).join('') + '<a href="#/home">← Free area</a>';
-    right = `<span class="bal">Balance <b>${euro(S.balance)}</b></span>`;
+    const nav = a === 'personal' ? [['#/home', 'Home'], ['#/intel', 'Intelligence'], ['#/train', 'Training']] : [['#/contests', 'Lobby'], ['#/mine', 'My contests'], ['#/wallet', 'Wallet']];
+    const ini = P().name[0];
+    html = `<a class="logo" href="#/home"><i></i>Skybreak</a>
+    <div class="switch" role="tablist" aria-label="Area"><a role="tab" href="#/home" aria-selected="${a === 'personal'}" class="${a === 'personal' ? 'on' : ''}">Personal</a><a role="tab" href="#/contests" aria-selected="${a === 'contest'}" class="${a === 'contest' ? 'on' : ''}">Contests</a></div>
+    <nav class="areanav" aria-label="${a === 'personal' ? 'Personal area' : 'Contest area'}">${nav.map(link).join('')}</nav>
+    <div class="right"><button class="btn small" data-check="manual" title="Look for your new games now">Check<span class="hide-s"> my games</span></button>
+    ${a === 'contest' ? `<a class="pill" href="#/wallet" title="Your balance">${euro2(S.balance)}</a>` : ''}
+    <details class="me"><summary aria-label="Account menu"><span class="av">${esc(ini)}</span></summary><div class="menu"><div class="who"><b>${esc(P().name)}</b><span>${tierName(P().tier)} · EUW · ${S.verified ? 'Verified' : 'Base'}</span></div>
+    <a href="#/account">Account</a><a href="#/rules">Rules</a><a href="#/support">Support</a><button type="button" data-signout>Sign out</button></div></details></div>`;
   }
-  $('#top').innerHTML = `<div class="top-in"><a class="logo" href="${S.profile == null ? '../' : '#/home'}"><i></i>Skybreak${a === 'contest' ? '<em>Contests</em>' : ''}</a><nav>${nav}</nav><div class="wallet">${S.profile != null ? `<span class="who"><b>${esc(P().name)}</b>${tierName(P().tier)} · EUW</span>` : ''}${right}</div></div>`;
+  $('#top').innerHTML = `<div class="top-in">${html}</div>`;
   $('#games-n').textContent = D.facts.games.toLocaleString('en-GB');
 }
 function needAccount() {
@@ -358,54 +474,80 @@ function needAccount() {
   location.hash = '#/signin';
   return true;
 }
-const statusTag = (s) => ({ waiting: '<span class="tag wait">waiting for your game</span>', unlocking: '<span class="tag wait">unlock pending (1 hour)</span>', played: '<span class="tag ok">played</span>', removed: '<span class="tag no">removed</span>', unlocked: '<span class="tag">unlocked</span>' }[s.status]);
-const picksHtml = (picks) => picks.map((p) => `<span class="tag ${p.level}">${CH[p.id].name} · ${p.level}</span>`).join(' ');
-function signupCard(s) {
-  const actions = s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}">Unlock</button>` : '';
-  const where = s.contestId ? `<a href="#/contest/${s.contestId}">See the contest</a>` : '';
-  return `<div class="card"><div class="row">${icon(splitPair(s.pair).champ)}<div><b>${pairLabel(s.pair)}</b><div class="small muted">${s.kind === 'training' ? 'Training' : `${s.ticket ? euro(s.ticket) : 'Free'} contest`} · locked ${when(s.at)}</div></div></div>
-    <p style="margin:10px 0">${picksHtml(s.picks)}</p><div class="row between">${statusTag(s)}${actions}</div>${s.note || where ? `<p class="small muted" style="margin-top:8px">${esc(s.note || '')} ${where}</p>` : ''}</div>`;
+const statusTag = (s) => ({ waiting: '<span class="tag wait">waiting for your game</span>', unlocking: `<span class="tag wait">unlocking until ${clock(s.unlockAt)}</span>`, played: '<span class="tag ok">played</span>', removed: '<span class="tag no">removed</span>', unlocked: '<span class="tag">unlocked</span>' }[s.status]);
+const picksHtml = (picks) => picks.map((p) => `<span class="tag ${p.level}">${CH[p.id].name} ${LV[p.level]}</span>`).join(' ');
+function signupRow(s) {
+  const what = s.kind === 'training' ? 'Training · all challenges' : `${euro(s.ticket)} contest · ${picksHtml(s.picks)}`;
+  const act = s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}">Unlock</button>` : s.contestId ? `<a class="btn ghost small" href="${s.kind === 'training' ? `#/train/contest/${s.contestId}` : `#/contest/${s.contestId}`}">Contest #${num(s.contestId)}</a>` : '';
+  return `<div class="item"><div class="row nowrap">${icon(splitPair(s.pair).champ)}<div class="grow"><b>${pairLabel(s.pair)}</b><div class="small muted">${what} · locked ${clock(s.at)}</div></div>${act}</div>
+  <div class="row between" style="margin-top:6px">${statusTag(s)}${s.note ? `<span class="small muted grow" style="text-align:right">${esc(s.note)}</span>` : ''}</div></div>`;
 }
-function checkBar(contest) {
-  return `<div class="card hi checkbar"><div><h3>Checks</h3><p class="small muted">Last check ${when(S.lastCheck)}. The daily check also removes sign-ups not played yet${contest ? ', at no cost' : ''}.</p></div>
-  <div class="row"><button class="btn" data-check="manual">Run a check</button><button class="btn ghost" data-check="daily">Skip to the daily check</button></div></div>`;
+function checkBar() {
+  return `<div class="checkbar"><div class="small muted">Last check ${when(S.lastCheck)}. At the end of the day the daily check runs and removes sign-ups not played. ${rl('signups')}</div>
+  <div class="row"><button class="btn" data-check="manual">Check my games</button><button class="btn ghost" data-check="day">Skip to the end of the day</button></div></div>`;
+}
+function tabs(items, on) { return `<div class="tabs" role="tablist">${items.map(([href, name, k]) => `<a role="tab" href="${href}" class="${k === on ? 'on' : ''}" aria-selected="${k === on}">${name}</a>`).join('')}</div>`; }
+function spark(values) {
+  if (values.length < 2) return '';
+  const w = 64, h = 20, step = w / (values.length - 1);
+  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / 100) * h).toFixed(1)}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><line x1="0" x2="${w}" y1="${h / 2}" y2="${h / 2}" class="mid"/><polyline points="${pts}"/></svg>`;
+}
+function divergingChart(list) {
+  if (!list.length) return '<p class="muted">Not enough games yet.</p>';
+  const max = Math.max(20, ...list.map((e) => Math.abs(e.delta)));
+  return `<div class="dchart" role="table" aria-label="Your position against your tier, per challenge"><div class="drow head" role="row"><span role="columnheader"></span><span role="columnheader" class="dscale"><span>below your tier</span><span>above your tier</span></span><span role="columnheader" class="dval">vs tier</span><span role="columnheader" class="dsp hide-s">last 10</span></div>
+  ${list.map((e) => { const w = (Math.abs(e.delta) / max) * 50; return `<div class="drow ${e.n < 5 ? 'few' : ''}" role="row" title="${CH[e.id].name}: average position ${50 + e.delta}/100 over ${e.n} games"><span class="dlab" role="cell">${CH[e.id].name}</span>
+    <span class="dtrack" role="cell"><i class="${e.delta >= 0 ? 'up' : 'down'}" style="${e.delta >= 0 ? `left:50%;width:${w}%` : `right:50%;width:${w}%`}"></i></span>
+    <span class="dval" role="cell"><b>${signed(e.delta)}</b> <span class="muted small">${e.n < 5 ? 'few data' : `${e.n} games`}</span></span><span class="dsp hide-s" role="cell">${spark(e.last)}</span></div>`; }).join('')}</div>`;
+}
+let openPicker = null;
+/** Pair picker: the account's pairs, a champion carousel and the roles. Used by training and by Join. */
+function pairPicker(draft) {
+  const ms = mains();
+  const champs = [...new Set([...ms.map((m) => splitPair(m.pair).champ), ...pairKeys.map((k) => splitPair(k).champ).sort((a, b) => champName(a).localeCompare(champName(b)))])];
+  const ci = champs.indexOf(draft.champ);
+  const rolesOf = (c) => Object.keys(ROLES).filter((r) => D.pairs[`${r}|${c}`]);
+  const html = `<div class="chips mine">${ms.slice(0, 4).map((m) => `<button class="chip ${m.pair === draft.pair ? 'on' : ''}" data-mypair="${m.pair}">${pairLabel(m.pair)} <span class="muted">${m.games}</span></button>`).join('')}</div>
+  <div class="carousel" aria-label="Champions"><button class="cnav" data-cstep="-1" aria-label="Previous champion">‹</button><div class="ctrack" id="ctrack">${champs.map((c, i) => `<button class="citem ${i === ci ? 'on' : ''}" data-champ="${c}" style="--d:${Math.min(3, Math.abs(i - ci))}" aria-pressed="${i === ci}">${icon(c)}<span>${champName(c)}</span></button>`).join('')}</div><button class="cnav" data-cstep="1" aria-label="Next champion">›</button></div>
+  <div class="row center">${rolesOf(draft.champ).map((ro) => `<button class="chip ${draft.pair === `${ro}|${draft.champ}` ? 'on' : ''}" data-role="${ro}">${ROLES[ro]}</button>`).join('')}</div>
+  <p class="small muted center" style="margin-top:6px">${(ms.find((m) => m.pair === draft.pair) || { games: 0 }).games} of your signed-up games with ${pairLabel(draft.pair)}</p>`;
+  const bind = (rerender) => {
+    const tr = $('#ctrack'), on = tr && tr.querySelector('.citem.on');
+    if (on) tr.scrollLeft = on.offsetLeft - tr.clientWidth / 2 + on.clientWidth / 2;
+    const keep = () => { const y = scrollY; rerender(); scrollTo(0, y); };
+    const setChamp = (c) => { const mine = ms.find((m) => splitPair(m.pair).champ === c); draft.champ = c; draft.pair = mine ? mine.pair : `${rolesOf(c)[0]}|${c}`; draft.picks = []; keep(); };
+    app.querySelectorAll('[data-champ]').forEach((b) => (b.onclick = () => setChamp(b.dataset.champ)));
+    app.querySelectorAll('[data-cstep]').forEach((b) => (b.onclick = () => setChamp(champs[(ci + Number(b.dataset.cstep) + champs.length) % champs.length])));
+    app.querySelectorAll('[data-role]').forEach((b) => (b.onclick = () => { draft.pair = `${b.dataset.role}|${draft.champ}`; draft.picks = []; keep(); }));
+    app.querySelectorAll('[data-mypair]').forEach((b) => (b.onclick = () => { draft.pair = b.dataset.mypair; draft.champ = splitPair(draft.pair).champ; draft.picks = []; keep(); }));
+  };
+  return { html, bind };
+}
+function newDraft(kind, ticket) {
+  const first = (mains()[0] || { pair: 'MIDDLE|Ahri' }).pair;
+  return { kind, ticket, champ: splitPair(first).champ, pair: first, picks: [] };
 }
 
-// ---------- public: sign in, create account ----------
+// ---------- public: sign in, create account, link Riot ----------
 function viewSignin() {
-  app.innerHTML = `<div class="narrow"><h1>Sign in</h1><p class="sub">In the real product you sign in with Riot: Skybreak gets your Riot ID, region, rank tier and ranked games, never your password. In this demo, pick one of 5 real EUW players. Their games are real, their names are invented.</p>
+  app.innerHTML = `<div class="narrow"><p class="eyebrow">Sign in</p><h1>Pick a demo account</h1><p class="sub">In the real product you sign in with Riot. Here, pick one of 5 real EUW players: their games are real, their names are invented.</p>
   <div class="profiles">${PROFILES.map((p, i) => { const m = {}; for (const g of p.games) m[g.pair] = (m[g.pair] || 0) + 1; const top = Object.entries(m).sort((a, b) => b[1] - a[1])[0][0];
-    return `<button class="profile" data-profile="${i}">${icon(splitPair(top).champ, 'champ lg')}<span><b>${esc(p.name)}</b><span class="tier t-${p.tier.toLowerCase()}">${tierName(p.tier)}</span><span class="small muted">${p.role} · main ${pairLabel(top)} · ${p.games.length} games</span></span></button>`; }).join('')}</div>
+    return `<button class="profile" data-profile="${i}">${icon(splitPair(top).champ, 'champ lg')}<span><b>${esc(p.name.split('#')[0])}</b><span class="tier t-${p.tier.toLowerCase()}">${tierName(p.tier)}</span><span class="small muted">${p.role} · main ${pairLabel(top)}</span></span></button>`; }).join('')}</div>
   <p class="small muted" style="margin-top:18px">No account yet? <a href="#/signup">Create one</a>.</p></div>`;
   app.querySelectorAll('[data-profile]').forEach((b) => (b.onclick = () => signIn(Number(b.dataset.profile))));
 }
-function signIn(i) {
-  const keep = S.signupForm;
-  S = fresh();
-  S.signupForm = keep;
-  S.profile = i;
-  const all = PROFILES[i].games;
-  const past = Math.floor(all.length * PAST_SHARE);
-  // the history keeps real results; its dates are moved so the last game was yesterday
-  const shift = S.now - DAY - all[past - 1].start;
-  S.games = all.slice(0, past).map((g, k) => ({ id: `H${k}`, pair: g.pair, win: g.win, minutes: g.minutes, v: g.v, start: g.start + shift, note: 'Before you joined: judged for your profile.', signup: null }));
-  S.cursor = past;
-  seedContests();
-  save();
-  location.hash = '#/home';
-}
 function viewSignup() {
   const f = S.signupForm || {};
-  app.innerHTML = `<div class="narrow"><h1>Create your account</h1><p class="sub">A basic account is enough for training, milestones and free contests. Prize contests need a verified account, asked later in the contest area.</p>
+  app.innerHTML = `<div class="narrow"><p class="eyebrow">Step 1 of 2</p><h1>Create your account</h1><p class="sub">A base account opens the whole personal area: Intelligence, Training and improvement contests. Prize contests need a verified account, asked later. ${rl('accounts')}</p>
   <form class="card form" id="su" novalidate>
     <div><label class="fld" for="em">Email</label><input type="email" id="em" autocomplete="email" value="${esc(f.email || '')}"></div>
     <div><label class="fld" for="pw">Password</label><input type="password" id="pw" autocomplete="new-password"></div>
     <div class="row"><div><label class="fld" for="co">Country</label><select id="co">${['Italy', 'France', 'Germany', 'Spain', 'United Kingdom', 'Other EU'].map((c) => `<option>${c}</option>`).join('')}</select></div>
     <div><label class="fld" for="la">Language</label><select id="la"><option>English</option><option>Italiano</option></select></div></div>
-    <label class="check"><input type="checkbox" id="tos"> I accept the <a href="#/rules">rules</a> and the privacy terms.</label>
+    <label class="check"><input type="checkbox" id="tos"> I accept the <a href="#/rules">rules</a> (v1) and the privacy terms.</label>
     <label class="check"><input type="checkbox" id="mk"> Send me news about Skybreak (optional).</label>
-    <div class="step2"><b>Next: link your Riot account</b><p class="small muted">With Riot Sign On. In this demo you pick one of the 5 accounts.</p></div>
-    <div class="row"><button class="btn" type="submit">Create account</button><a class="btn ghost" href="#/signin">Skip (demo)</a></div>
+    <div class="row"><button class="btn" type="submit">Create account</button><a class="btn ghost" href="#/link">Skip (demo)</a></div>
   </form></div>`;
   $('#su').onsubmit = (e) => {
     e.preventDefault();
@@ -413,335 +555,479 @@ function viewSignup() {
     if ($('#pw').value.length < 8) { toast('The password needs at least 8 characters.'); return; }
     if (!$('#tos').checked) { toast('Accept the rules to continue.'); return; }
     S.signupForm = { email: $('#em').value, country: $('#co').value, language: $('#la').value, marketing: $('#mk').checked };
-    save(); toast('Account created (demo). Now link your Riot account.'); location.hash = '#/signin';
+    save(); location.hash = '#/link';
   };
 }
-
-// ---------- free area ----------
-function edgeChart(list) {
-  if (!list.length) return '<p class="muted">Not enough games yet.</p>';
-  const max = Math.max(0.15, ...list.map((e) => Math.abs(e.edge)));
-  return `<div class="dchart" role="table" aria-label="Your success rate against the average player of your tier">${list.map((e) => {
-    const w = (Math.abs(e.edge) / max) * 50;
-    return `<div class="drow" role="row" title="${CH[e.id].name}: you ${pct(e.you)}, average ${pct(e.avg)} (${e.n} games, ${e.level})"><span class="dlab" role="cell">${CH[e.id].name}</span>
-    <span class="dtrack" role="cell"><i class="${e.edge >= 0 ? 'up' : 'down'}" style="${e.edge >= 0 ? `left:50%;width:${w}%` : `right:50%;width:${w}%`}"></i></span>
-    <span class="dval" role="cell"><b>${e.edge >= 0 ? '+' : '−'}${Math.round(Math.abs(e.edge) * 100)}</b> <span class="muted">${pct(e.you)} vs ${pct(e.avg)}</span></span></div>`;
-  }).join('')}</div>`;
+function viewLink() {
+  app.innerHTML = `<div class="narrow"><p class="eyebrow">Step 2 of 2</p><h1>Link your Riot account</h1>
+  <div class="card"><p>We read your <b>Riot ID, region, rank tier and your ranked solo games</b>, through Riot's official API. Never your password, nothing during the game.</p>
+  <p class="note">Your Riot account can never be changed later: one person, one Riot account.</p>
+  <div class="row"><a class="btn" href="#/signin">Sign in with Riot</a><span class="small muted">Demo: you pick one of 5 real accounts.</span></div></div></div>`;
 }
-let homePair = null;
+
+// ---------- personal area ----------
 function viewHome() {
   if (needAccount()) return;
   const p = P();
-  const ms = mains().slice(0, 4);
-  if (!homePair || !ms.some((m) => m.pair === homePair)) homePair = ms[0].pair;
-  const all = edges(null);
-  const strong = all.filter((e) => e.edge > 0.03).slice(0, 3), weak = all.filter((e) => e.edge < -0.03).slice(-3).reverse();
-  const recent = S.games.slice().sort((a, b) => b.start - a.start).slice(0, 5);
-  const waiting = S.signups.filter(active);
-  const goals = S.milestones.filter((m) => m.status === 'active');
-  app.innerHTML = `<div class="hello"><div><p class="eyebrow">${tierName(p.tier)} · ${p.role} · EUW</p><h1>Welcome, ${esc(p.name.split('#')[0])}</h1>
-  <p class="sub">Your ${S.games.length} ranked games, judged against the average ${tierName(p.tier)} player with the same champion and role.</p></div>
-  <div class="row"><a class="btn" href="#/train/new">Lock a training game</a><a class="btn ghost" href="#/milestones">Set a milestone</a></div></div>
-  ${waiting.length ? `<div class="note">You have ${waiting.length} locked game${waiting.length > 1 ? 's' : ''} waiting. <a href="#/history">Run a check</a> after you play.</div>` : ''}
-  <section class="card"><div class="row between"><h2 style="margin:0">Your mains against your tier</h2><div class="chips">${ms.map((m) => `<button class="chip ${m.pair === homePair ? 'on' : ''}" data-hp="${m.pair}">${pairLabel(m.pair)} · ${m.games}</button>`).join('')}</div></div>
-  <p class="small muted" style="margin:6px 0 14px">How often you make each challenge (medium level where offered), minus how often the average ${tierName(p.tier)} player does. Right: above your tier. Left: below.</p>
-  ${edgeChart(edges(homePair))}</section>
-  <div class="grid2"><section class="card"><h3>Where you are strong</h3>${strong.length ? strong.map((e) => `<div class="tipline"><b>${CH[e.id].name}</b> <span class="tag ok">+${Math.round(e.edge * 100)} vs tier</span><p class="small muted">You make it ${pct(e.you)} of the time, the average ${pct(e.avg)}. Lock it in contests.</p></div>`).join('') : '<p class="muted small">No clear strength yet.</p>'}</section>
-  <section class="card"><h3>What to work on</h3>${weak.length ? weak.map((e) => `<div class="tipline"><b>${CH[e.id].name}</b> <span class="tag no">${Math.round(e.edge * 100)} vs tier</span><p class="small">${esc(tip(e.id))}</p></div>`).join('') : '<p class="muted small">Nothing clearly below your tier.</p>'}</section></div>
-  <div class="grid2"><section><h2>Recent games</h2>${recent.map(gameRow).join('')}<p><a href="#/history">All games</a></p></section>
-  <section><h2>Milestones</h2>${goals.length ? goals.map(milestoneCard).join('') : '<p class="muted">No milestone yet. Pick a challenge you usually miss and earn points when you make it.</p>'}<p><a href="#/milestones">Set a milestone</a></p></section></div>
-  <div class="card gold cta"><div><h3>Ready to compete?</h3><p class="small muted">Contests: 20 players, your own schedule, measured against your own tier. Free contests, and prize contests from 2 €.</p></div><a class="btn" href="#/contests">Enter the contest area</a></div>`;
-  app.querySelectorAll('[data-hp]').forEach((b) => (b.onclick = () => { homePair = b.dataset.hp; const y = scrollY; viewHome(); scrollTo(0, y); }));
+  const ms = mains();
+  const recent = analysed().sort((a, b) => b.start - a.start).slice(0, 3);
+  const impOpen = Object.values(S.imp).find((c) => c.state === 'open' && c.entries.some((e) => e.you));
+  const lastTrain = analysed().filter((g) => g.kind === 'training').sort((a, b) => b.start - a.start)[0];
+  const goals = S.milestones.filter((m) => m.status === 'active').slice(0, 2);
+  const waitingC = S.signups.filter((s) => s.kind === 'contest' && active(s));
+  const waitingT = S.signups.filter((s) => s.kind === 'training' && active(s));
+  const prog = Object.values(S.contests).filter((c) => c.state === 'open' && c.entries.some((e) => e.you));
+  const placeIn = (c) => ranked(c).find((e) => e.you)._place;
+  const lastC = Object.values(S.contests).filter((c) => c.state === 'done' && c.entries.some((e) => e.you)).sort((a, b) => b.closedAt - a.closedAt)[0];
+  const lastDone = lastC && { c: lastC, me: lastC.entries.find((e) => e.you) };
+  app.innerHTML = `<section class="hero"><p class="eyebrow">${tierName(p.tier)} · ${p.role} main · EUW</p><h1>Welcome, ${esc(p.name)}</h1>
+  <p class="sub">Every game you sign up is judged against the average ${tierName(p.tier)} player with the same champion and role.</p>
+  <div class="row"><a class="btn" href="#/train/new">Sign up your next game</a>${waitingT.length ? `<span class="small muted">${waitingT.length} training sign-up${waitingT.length > 1 ? 's' : ''} waiting · <a href="#/train">see</a></span>` : ''}</div></section>
+  <div class="home3">
+  <section class="card block"><p class="eyebrow">How you're playing</p>
+  ${recent.length ? recent.map((g) => `<a class="line" href="#/train/game/${g.id}">${icon(splitPair(g.pair).champ)}<span class="grow"><b>${pairLabel(g.pair)}</b> <span class="${g.win ? 'w' : 'l'}">${g.win ? 'W' : 'L'}</span> <span class="muted small">${Math.round(g.minutes)}'</span></span><span class="small"><b>${g.above} of ${g.of}</b> <span class="muted">above your tier</span></span></a>`).join('') : '<p class="muted">No games yet: sign up your next one.</p>'}
+  <a class="more" href="#/intel">Open Intelligence →</a></section>
+  <section class="card block"><p class="eyebrow">How you're improving</p>
+  ${impOpen ? `<a class="line" href="#/train/contest/${impOpen.id}"><span class="grow"><b>Improvement contest #${num(impOpen.id)}</b><div class="small muted">${impOpen.entries.length}/${SEATS} games</div></span><span class="big">${ord(placeIn(impOpen))}</span></a>` : '<p class="muted small">No improvement contest running: your next training game opens or joins one.</p>'}
+  ${lastTrain ? `<p class="small">Last training game: <b>${signed(lastTrain.imp.total)}</b> improvement <span class="muted">(${pairLabel(lastTrain.pair)})</span></p>` : ''}
+  ${goals.length ? goals.map((m) => `<div class="small">${pairLabel(m.pair)} · ${CH[m.id].name} ${m.level} · <b>${m.done} of ${m.target}</b><div class="bar"><i style="width:${(m.done / m.target) * 100}%"></i></div></div>`).join('') : '<p class="small muted">No milestone yet. <a href="#/train/milestones">Set one</a>.</p>'}
+  <a class="more" href="#/train">Open Training →</a></section>
+  <section class="card block goldcard"><p class="eyebrow">Where to compete</p>
+  <p class="small"><b>${euro2(S.balance)}</b> <span class="muted">in your wallet</span> · ${waitingC.length} sign-up${waitingC.length === 1 ? '' : 's'} waiting</p>
+  ${prog.map((c) => `<a class="line" href="#/contest/${c.id}"><span class="grow"><b>${euro(c.ticket)} contest #${num(c.id)}</b><div class="small muted">${c.entries.length}/${SEATS} games</div></span><span class="big">${ord(placeIn(c))}</span></a>`).join('')}
+  ${lastDone && !prog.length ? `<a class="line" href="#/contest/${lastDone.c.id}"><span class="grow"><b>Last: ${euro(lastDone.c.ticket)} contest #${num(lastDone.c.id)}</b><div class="small muted">${lastDone.me.prize ? `won ${euro2(lastDone.me.prize)}` : 'no prize'}</div></span><span class="big">${ord(lastDone.me.place)}</span></a>` : ''}
+  <div class="row">${TICKETS.map((t) => `<a class="btn ghost small" href="#/join/${t}">${euro(t)}</a>`).join('')}</div>
+  <a class="more" href="#/contests">Go to Contests →</a></section></div>`;
 }
-/** How many of the offered challenges the game made, at the reference level, on the account's tier lines. */
-function madeCount(g) {
-  let n = 0, of = 0;
-  for (const id of Object.keys(offersOf(g.pair))) {
-    const l = refLevel(g.pair, id), v = g.v[id];
-    if (v == null) continue;
-    of++; if (v >= lineOf(g.pair, id, l, g.win, P().tier)) n++;
+
+let intelPair = null, explore = null;
+function viewIntel(tab) {
+  if (needAccount()) return;
+  const t = tab === 'explore' ? 'explore' : 'you';
+  const head = `<h1>Intelligence</h1>${tabs([['#/intel', 'You', 'you'], ['#/intel/explore', 'Explore', 'explore']], t)}`;
+  const tier = P().tier;
+  if (t === 'you') {
+    const ms = mains();
+    if (!ms.length) { app.innerHTML = `${head}<p class="muted">No signed-up games yet. <a href="#/train/new">Sign up your next game</a>.</p>`; return; }
+    if (!intelPair || !ms.some((m) => m.pair === intelPair)) intelPair = ms[0].pair;
+    const prof = profileOf(intelPair);
+    const strong = prof.filter((e) => e.delta > 3 && e.n >= 5).slice(0, 3);
+    const weak = prof.filter((e) => e.delta < -3 && e.n >= 5).slice(-3).reverse();
+    const r = rec();
+    const n = (ms.find((m) => m.pair === intelPair) || {}).games;
+    app.innerHTML = `${head}<p class="sub">Only your signed-up games, training and contests. Position 0-100: where you stand among ${tierName(tier)} players with the same champion and role; 50 is the middle.</p>
+    <div class="chips">${ms.slice(0, 6).map((m) => `<button class="chip ${m.pair === intelPair ? 'on' : ''}" data-ip="${m.pair}">${pairLabel(m.pair)} <span class="muted">${m.games}</span></button>`).join('')}</div>
+    <section class="card tech"><div class="row between"><h2 class="h">${pairLabel(intelPair)}: you against your tier</h2><span class="small muted">based on ${n} signed-up games</span></div>${divergingChart(prof)}</section>
+    <div class="grid2"><section class="card"><h3>Strengths</h3>${strong.length ? strong.map((e) => `<div class="tipline"><b>${CH[e.id].name}</b> <span class="tag ok">${signed(e.delta)} vs tier</span></div>`).join('') : '<p class="muted small">No clear strength yet.</p>'}</section>
+    <section class="card"><h3>To work on</h3>${weak.length ? weak.map((e) => `<div class="tipline"><b>${CH[e.id].name}</b> <span class="tag no">${signed(e.delta)} vs tier</span><p class="small">${esc(tip(e.id))}</p></div>`).join('') : '<p class="muted small">Nothing clearly below your tier.</p>'}<p class="small muted">Tips for ${tierName(tier)} players.</p></section></div>
+    <section class="card tech"><h3>In contests you would make</h3><p class="small muted">How often your games reached each level of each challenge on ${pairLabel(intelPair)}. The choice in a contest is yours. ${rl('challenges')}</p>
+    <div class="tablewrap"><table class="num"><tr><th>Challenge</th><th>Easy</th><th>Medium</th><th>Hard</th><th>Games</th></tr>${prof.map((e) => `<tr><td>${CH[e.id].name}</td>${LEVELS.map((l) => { const x = r[`${intelPair}#${e.id}#${l}`]; return `<td>${!x ? '<span class="muted">not offered</span>' : x.n < 5 ? `<span class="muted">${pct(x.hits / x.n)} · few data</span>` : pct(x.hits / x.n)}</td>`; }).join('')}<td>${e.n}</td></tr>`).join('')}</table></div></section>`;
+    app.querySelectorAll('[data-ip]').forEach((b) => (b.onclick = () => { intelPair = b.dataset.ip; const y = scrollY; viewIntel('you'); scrollTo(0, y); }));
+    return;
   }
-  return { n, of };
+  if (!explore) explore = { champ: 'Ahri', role: 'MIDDLE', tier };
+  const champs = [...new Set(pairKeys.map((k) => splitPair(k).champ))].sort((a, b) => champName(a).localeCompare(champName(b)));
+  const roles = Object.keys(ROLES).filter((r) => D.pairs[`${r}|${explore.champ}`]);
+  if (!roles.includes(explore.role)) explore.role = roles[0];
+  const pair = `${explore.role}|${explore.champ}`, offers = offersOf(pair);
+  const off = D.challenges.filter((c) => !offers[c.id]);
+  app.innerHTML = `${head}<p class="sub">Everyone's data, not yours: the thresholds every player of a tier must reach with a champion and role. The same in Training and in contests.</p>
+  <div class="row filters"><label class="fld">Champion <select id="xc">${champs.map((c) => `<option value="${c}" ${c === explore.champ ? 'selected' : ''}>${champName(c)}</option>`).join('')}</select></label>
+  <label class="fld">Role <select id="xr">${roles.map((r) => `<option value="${r}" ${r === explore.role ? 'selected' : ''}>${ROLES[r]}</option>`).join('')}</select></label>
+  <label class="fld">Tier <select id="xt">${TIERS.map((x) => `<option value="${x}" ${x === explore.tier ? 'selected' : ''}>${tierName(x)}${x === 'GOLD' ? ' and below' : x === 'MASTER' ? ' and above' : ''}</option>`).join('')}</select></label></div>
+  <section class="card tech"><div class="row between"><h2 class="h">${icon(explore.champ)} ${pairLabel(pair)} · ${tierName(explore.tier)}</h2><span class="small muted">${Object.keys(offers).length} of ${D.challenges.length} challenges offered</span></div>
+  <div class="tablewrap"><table class="num"><tr><th>Challenge</th><th>Easy · ${POINTS.easy}</th><th>Medium · ${POINTS.medium}</th><th>Hard · ${POINTS.hard}</th><th>Typical</th></tr>
+  ${D.challenges.filter((c) => offers[c.id]).map((c) => `<tr><td><b>${c.name}</b><div class="small muted">${c.family}</div></td>${LEVELS.map((l) => { const x = lineText(pair, c.id, l, explore.tier); return `<td>${x == null ? '<span class="muted">not offered</span>' : x}</td>`; }).join('')}<td class="muted">${fmt(c.id, (valueAt(pair, c.id, true, 0.5, explore.tier) + valueAt(pair, c.id, false, 0.5, explore.tier)) / 2)}</td></tr>`).join('')}</table></div>
+  ${off.length ? `<p class="small muted" style="margin-top:10px">Not offered for this pair: ${off.map((c) => c.name).join(', ')}. They don't pass the fairness tests for it. ${rl('challenges')}</p>` : ''}
+  <p class="small muted">Data: ${D.facts.games.toLocaleString('en-GB')} ranked solo games, EUW, all patches, catalog of ${D.generated}. Easy: about 6 players in 10 reach it; medium about 1 in 3; hard about 1 in 7.</p></section>`;
+  $('#xc').onchange = (e) => { explore.champ = e.target.value; viewIntel('explore'); };
+  $('#xr').onchange = (e) => { explore.role = e.target.value; viewIntel('explore'); };
+  $('#xt').onchange = (e) => { explore.tier = e.target.value; viewIntel('explore'); };
 }
-function gameRow(g) {
-  const m = madeCount(g);
-  return `<details class="game"><summary>${icon(splitPair(g.pair).champ)}<span class="g1"><b>${pairLabel(g.pair)}</b><span class="small muted">${day(g.start)} · ${g.minutes} min · <span class="${g.win ? 'w' : 'l'}">${g.win ? 'Win' : 'Loss'}</span></span></span>
-  <span class="g2">${g.total != null ? `<span class="kpi" style="font-size:20px">${g.total}</span><span class="small muted">points</span>` : `<b>${m.n}/${m.of}</b><span class="small muted">challenges</span>`}</span></summary>
-  <div class="gbody">${g.note ? `<p class="small">${esc(g.note)}${g.signup && S.signups.find((s) => s.id === g.signup)?.contestId ? ` <a href="#/contest/${S.signups.find((s) => s.id === g.signup).contestId}">Leaderboard</a>` : ''}</p>` : ''}
-  ${g.results ? `<div class="tablewrap"><table><tr><th>Your pick</th><th>You</th><th>Line below</th><th>Level line</th><th>Points</th></tr>${g.results.map((r) => `<tr><td>${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span></td><td>${fmt(r.id, r.value)}</td><td>${fmt(r.id, r.lo)}</td><td>${fmt(r.id, r.hi)}</td><td>${r.full ? `<b>${r.points}</b> made it` : r.frac > 0 ? `<b>${r.points}</b> (${Math.round(r.frac * 100)}% of the way)` : '0'}</td></tr>`).join('')}</table></div>` : ''}
-  <div class="tablewrap"><table><tr><th>Challenge</th><th>You</th><th>Easy</th><th>Medium</th><th>Hard</th></tr>${Object.keys(offersOf(g.pair)).map((id) => `<tr><td>${CH[id].name}</td><td>${fmt(id, g.v[id])}</td>${LEVELS.map((l) => { const line = lineOf(g.pair, id, l, g.win, P().tier); return `<td>${line == null ? '<span class="muted">—</span>' : `<span class="${g.v[id] != null && g.v[id] >= line ? 'hit' : 'muted'}">${fmt(id, line)}</span>`}</td>`; }).join('')}</tr>`).join('')}</table></div>
-  <p class="small muted">Highlighted: the lines you reached in this game, for a ${tierName(P().tier)} player.</p></div></details>`;
-}
-function viewHistory() {
+
+let trainDraft = null;
+function viewTrain(arg = '') {
   if (needAccount()) return;
-  const list = S.games.slice().sort((a, b) => b.start - a.start);
-  const waiting = S.signups.filter(active);
-  app.innerHTML = `<h1>Match history</h1><p class="sub">Every ranked solo game of your account, judged against your tier. Open a game to see every line. If a game did not count for a sign-up, it says why.</p>
-  ${checkBar(false)}${waiting.length ? `<h2>Waiting for your game</h2><div class="grid">${waiting.map(signupCard).join('')}</div>` : ''}
-  <h2>Games (${list.length})</h2>${list.map(gameRow).join('')}`;
+  const [sub, id] = arg.split('/');
+  if (sub === 'new') return viewTrainNew();
+  if (sub === 'game') return viewGame(id);
+  if (sub === 'contest') return viewImpContest(id);
+  const t = ['games', 'improvement', 'milestones'].includes(sub) ? sub : 'signups';
+  const head = `<div class="hello"><div><h1>Training</h1><p class="sub">Sign up a game with a champion and role: it is judged on all the challenges of the pair and enters a free improvement contest. ${rl('personal')}</p></div><a class="btn" href="#/train/new">+ New sign-up</a></div>
+  ${tabs([['#/train', 'Sign-ups', 'signups'], ['#/train/games', 'Games', 'games'], ['#/train/improvement', 'Improvement', 'improvement'], ['#/train/milestones', 'Milestones', 'milestones']], t)}`;
+  if (t === 'signups') {
+    const mine = S.signups.filter((s) => s.kind === 'training');
+    const act = mine.filter(active), ended = mine.filter((s) => !active(s)).slice(-8).reverse();
+    app.innerHTML = `${head}${checkBar()}<h2>Waiting for your game</h2>${act.length ? `<div class="list">${act.map(signupRow).join('')}</div>` : '<p class="muted">Nothing waiting. <a href="#/train/new">Sign up your next game</a>.</p>'}
+    ${ended.length ? `<h2>Ended</h2><div class="list">${ended.map(signupRow).join('')}</div>` : ''}`;
+  } else if (t === 'games') {
+    const list = S.games.slice().sort((a, b) => b.start - a.start);
+    app.innerHTML = `${head}<p class="small muted">Every game a check found. Only signed-up games are analysed. ${rl('signups')}</p><div class="list">${list.map(gameLine).join('')}</div>`;
+  } else if (t === 'improvement') {
+    const mine = Object.values(S.imp).filter((c) => c.entries.some((e) => e.you)).sort((a, b) => b.createdAt - a.createdAt);
+    app.innerHTML = `${head}<p class="sub">Free contests of 20 training games, any tier: each player is measured on their own tier and on their own past games. ${rl('personal', 'How it works')}</p>
+    <div class="list">${mine.map((c) => { const me = ranked(c).find((e) => e.you); return `<a class="item link" href="#/train/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>Improvement contest #${num(c.id)}</b><div class="small muted">${c.state === 'open' ? `Open · ${c.entries.length}/${SEATS}` : `Finished · ${day(c.closedAt)}`} · ${pairLabel(me.pair)}</div></div><span class="small">${signed(me.total)}</span><span class="big">${ord(me._place)}</span></div></a>`; }).join('') || '<p class="muted">None yet.</p>'}</div>`;
+  } else viewMilestones(head);
 }
-function viewTrain() {
-  if (needAccount()) return;
-  const mine = S.signups.filter((s) => s.kind === 'training').slice().reverse();
-  app.innerHTML = `<div class="hello"><div><h1>Training</h1><p class="sub">Free, as many games as you like. Lock a champion, a role and 3 challenges, play, and the check judges the game exactly like a contest game.</p></div><a class="btn" href="#/train/new">Lock a training game</a></div>
-  ${checkBar(false)}<h2>Your training games</h2>${mine.length ? `<div class="grid">${mine.map(signupCard).join('')}</div>` : '<p class="muted">None yet.</p>'}`;
+function gameLine(g) {
+  const kind = g.kind === 'training' ? '<span class="tag sky">training</span>' : g.kind === 'contest' ? '<span class="tag gold">contest</span>' : '<span class="tag">not signed up</span>';
+  const right = g.analysed ? `<span class="small"><b>${g.above}/${g.of}</b> <span class="muted">above tier</span></span>${g.imp ? `<span class="small hide-s">${signed(g.imp.total)}</span>` : g.total != null ? `<span class="small hide-s">${g.total} pts</span>` : ''}` : `<span class="small muted">${esc(g.note)}</span>`;
+  const inner = `<div class="row nowrap">${icon(splitPair(g.pair).champ)}<div class="grow"><b>${pairLabel(g.pair)}</b> ${kind}<div class="small muted">${day(g.start)} · ${Math.round(g.minutes)} min · <span class="${g.win ? 'w' : 'l'}">${g.win ? 'Win' : 'Loss'}</span></div></div>${right}</div>`;
+  return g.analysed ? `<a class="item link" href="#/train/game/${g.id}">${inner}</a>` : `<div class="item dim">${inner}</div>`;
 }
-function milestoneCard(m) {
-  return `<div class="card ms"><div class="row">${icon(splitPair(m.pair).champ)}<div style="flex:1"><b>${CH[m.id].name}</b> <span class="tag ${m.level}">${m.level}</span><div class="small muted">${pairLabel(m.pair)} · ${m.target} time${m.target > 1 ? 's' : ''} · +${m.points} points</div></div>${m.status === 'reached' ? '<span class="tag ok">reached</span>' : `<b>${m.done}/${m.target}</b>`}</div>
-  <div class="bar" style="margin-top:10px"><i style="width:${(m.done / m.target) * 100}%"></i></div></div>`;
+function viewTrainNew() {
+  if (!trainDraft) trainDraft = newDraft('training', 0);
+  const pp = pairPicker(trainDraft);
+  const n = Object.keys(offersOf(trainDraft.pair)).length;
+  app.innerHTML = `<p><a href="#/train">← Training</a></p><h1>New training sign-up</h1><p class="sub">Lock a champion and a role. No challenges to pick: the game is judged on all of them.</p>
+  <section class="card">${pp.html}</section>
+  <div class="card lockbar"><div class="row between"><div><b>${pairLabel(trainDraft.pair)}</b> · all ${n} challenges judged
+  <div class="small muted">The same challenges and thresholds as in contests · first ranked solo game with ${pairLabel(trainDraft.pair)} after locking ${rl('signups')} · unplayed sign-ups are removed at the end of the day</div></div>
+  <button class="btn" id="lock">Lock ${pairLabel(trainDraft.pair)}</button></div></div>`;
+  pp.bind(viewTrainNew);
+  $('#lock').onclick = () => {
+    S.signups.push({ id: uid('S'), kind: 'training', ticket: 0, pair: trainDraft.pair, picks: [], at: S.now, status: 'waiting' });
+    save(); toast(`Locked ${pairLabel(trainDraft.pair)}. Play it, then check your games.`);
+    trainDraft = null; location.hash = '#/train';
+  };
+}
+function viewGame(id) {
+  const g = S.games.find((x) => x.id === id);
+  if (!g || !g.analysed) { app.innerHTML = '<p>Game not found. <a href="#/train/games">Games</a></p>'; return; }
+  const tier = P().tier;
+  const prev = analysed().filter((x) => x.kind === 'training' && x.pair === g.pair && x.start < g.start).sort((a, b) => b.start - a.start).slice(0, 10);
+  const avgPos = (cid) => { const l = prev.filter((x) => x.pos[cid] != null); return l.length >= 3 ? l.reduce((a, x) => a + x.pos[cid], 0) / l.length : null; };
+  const rows = Object.keys(g.pos).sort((a, b) => g.pos[b] - g.pos[a]);
+  const c = g.contestId && findContest(g.contestId);
+  app.innerHTML = `<p><a href="#/train/games">← Games</a></p><div class="hello"><div><p class="eyebrow">${g.kind === 'contest' ? 'Contest game' : 'Training game'} · ${when(g.start)}</p><h1>${icon(splitPair(g.pair).champ)} ${pairLabel(g.pair)} <span class="${g.win ? 'w' : 'l'}">${g.win ? 'Win' : 'Loss'}</span></h1>
+  <p class="sub">${Math.round(g.minutes)} minutes · judged against ${tierName(tier)} players with ${pairLabel(g.pair)} · ${esc(g.note)} ${c ? `<a href="${c.kind === 'imp' ? `#/train/contest/${c.id}` : `#/contest/${c.id}`}">See contest #${num(c.id)}</a>` : ''}</p></div></div>
+  ${g.imp ? `<section class="card"><p class="eyebrow">Improvement <span class="muted">· demo numbers, formula not final</span></p><div class="impgrid">${[['vs your tier', g.imp.tier], [`vs your ${champName(splitPair(g.pair).champ)}`, g.imp.champ], [`vs your ${ROLES[splitPair(g.pair).role]}`, g.imp.role], [`vs your ${pairLabel(g.pair)}`, g.imp.pair]].map(([n, v]) => `<div><span class="small muted">${n}</span><b class="${v > 0 ? 'w' : v < 0 ? 'l' : ''}">${v == null ? '<span class="muted small">few games</span>' : signed(v)}</b></div>`).join('')}<div class="tot"><span class="small muted">this game</span><b>${signed(g.imp.total)}</b></div></div></section>` : ''}
+  ${g.results ? `<section class="card goldcard"><h3>Your 3 contest challenges · ${g.total} points</h3><div class="tablewrap"><table class="num"><tr><th>Pick</th><th>You</th><th>Line</th><th>Points</th></tr>${g.results.map((r) => `<tr><td>${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span></td><td>${fmt(r.id, r.value)}</td><td>${fmt(r.id, r.hi)}</td><td>${r.full ? `<b>${r.points}</b> made it` : r.frac > 0 ? `<b>${r.points}</b> (${Math.round(r.frac * 100)}% of the way)` : '0'}</td></tr>`).join('')}</table></div></section>` : ''}
+  <section class="card tech"><h3>Every challenge of ${pairLabel(g.pair)}</h3><div class="tablewrap"><table class="num"><tr><th>Challenge</th><th>You</th><th>Tier typical</th><th>Position</th><th>vs your ${pairLabel(g.pair)}</th><th>Contest level</th></tr>
+  ${rows.map((cid) => { const a = avgPos(cid), d = a == null ? null : g.pos[cid] - a; return `<tr><td>${CH[cid].name}</td><td><b>${fmt(cid, g.v[cid])}</b></td><td class="muted">${fmt(cid, valueAt(g.pair, cid, g.win, 0.5, tier))}</td>
+  <td><span class="posbar"><i style="width:${g.pos[cid]}%"></i></span> ${g.pos[cid]}</td><td>${d == null ? '<span class="muted">few games</span>' : d > 3 ? '<span class="w">▲ better</span>' : d < -3 ? '<span class="l">▼ worse</span>' : '<span class="muted">= same</span>'}</td>
+  <td>${g.reach[cid] ? `<span class="tag ${g.reach[cid]}">${g.reach[cid]} ✓</span>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</table></div>
+  <p class="small muted">Contest level: the highest level of each challenge this game would have made in a contest. ${rl('challenges')}</p></section>`;
+}
+function viewImpContest(id) {
+  const c = S.imp[id];
+  if (!c) { app.innerHTML = '<p>Contest not found. <a href="#/train/improvement">Improvement</a></p>'; return; }
+  const rows = ranked(c);
+  app.innerHTML = `<p><a href="#/train/improvement">← Improvement</a></p><div class="hello"><div><p class="eyebrow">Free · 20 training games · any tier</p><h1>Improvement contest #${num(c.id)}</h1>
+  <p class="sub">${c.state === 'open' ? `Open: ${c.entries.length} of ${SEATS} games, provisional.` : `Finished ${day(c.closedAt)}.`} Ranked by improvement: each game against its tier and against the player's own past games. Riot IDs only. <span class="muted">Demo numbers: the formula is not final.</span></p></div>
+  <div class="counter"><b>${c.entries.length}</b><span>of ${SEATS}</span></div></div>
+  <table class="lb"><tr class="head"><th>#</th><th>Player</th><th style="text-align:right">Improvement</th></tr>
+  ${rows.map((e) => `<tr class="${e.you ? 'you' : ''}"><td><span class="place">${e._tie ? '=' : ''}${e._place}</span></td><td><div class="row nowrap">${icon(splitPair(e.pair).champ)}<div><b>${esc(e.name)}</b>${e.you ? ' <span class="tag sky">you</span>' : ''}<div class="small muted">${tierName(e.tier)} · ${pairLabel(e.pair)}</div></div></div></td><td class="pts"><b class="kpi">${signed(e.total)}</b></td></tr>`).join('')}</table>`;
 }
 let msDraft = null;
-function viewMilestones() {
-  if (needAccount()) return;
+function viewMilestones(head) {
   const ms = mains().slice(0, 6);
-  if (!msDraft) msDraft = { pair: ms[0].pair, id: null, level: null, target: 2 };
+  if (!ms.length) { app.innerHTML = `${head}<p class="muted">Sign up some games first.</p>`; return; }
+  if (!msDraft) msDraft = { pair: ms[0].pair, id: null, level: null, target: 3 };
   const r = rec();
   const offers = offersOf(msDraft.pair);
   const options = Object.keys(offers).flatMap((id) => LEVELS.filter((l, i) => offers[id][i] != null).map((l) => ({ id, level: l, t: r[`${msDraft.pair}#${id}#${l}`] })))
-    .map((o) => ({ ...o, rate: o.t && o.t.n ? o.t.hits / o.t.n : null })).sort((a, b) => (a.rate ?? 1) - (b.rate ?? 1));
+    .map((o) => ({ ...o, rate: o.t && o.t.n ? o.t.hits / o.t.n : null })).sort((a, b) => (a.rate ?? 1) - (b.rate ?? 1)).slice(0, 12);
   const sel = options.find((o) => o.id === msDraft.id && o.level === msDraft.level);
-  const pts = sel ? POINTS[sel.level] * msDraft.target : 0;
-  app.innerHTML = `<h1>Milestones</h1><p class="sub">Pick a challenge you usually miss with one of your champions. Make it the number of times you choose, in your normal ranked games, and you earn Skybreak points. Points are not money.</p>
-  <div class="card"><h3>New milestone</h3><label class="fld">Champion and role</label><div class="chips">${ms.map((m) => `<button class="chip ${m.pair === msDraft.pair ? 'on' : ''}" data-mp="${m.pair}">${pairLabel(m.pair)}</button>`).join('')}</div>
-  <label class="fld" style="margin-top:14px">Challenge and level <span class="muted">(the ones you make least come first)</span></label>
-  <div class="opts">${options.map((o) => `<button class="opt ${sel === o ? 'on' : ''}" data-mi="${o.id}" data-ml="${o.level}"><b>${CH[o.id].name}</b> <span class="tag ${o.level}">${o.level}</span><span class="small muted">${o.rate == null ? 'not measured yet' : `you: ${pct(o.rate)} of ${o.t.n} games · average ${pct(TARGET[o.level])}`}</span></button>`).join('')}</div>
+  app.innerHTML = `${head}<p class="sub">A personal goal: a challenge you usually miss with one of your pairs, reached the number of times you choose. Signed-up games count by themselves.</p>
+  <div class="list">${S.milestones.slice().reverse().map((m) => `<div class="item"><div class="row nowrap">${icon(splitPair(m.pair).champ)}<div class="grow"><b>${CH[m.id].name}</b> <span class="tag ${m.level}">${m.level}</span><div class="small muted">${pairLabel(m.pair)} · ${m.target} times</div></div>${m.status === 'reached' ? '<span class="tag ok">reached</span>' : `<b>${m.done} of ${m.target}</b>`}</div><div class="bar" style="margin-top:8px"><i style="width:${(m.done / m.target) * 100}%"></i></div></div>`).join('') || '<p class="muted">No milestone yet.</p>'}</div>
+  <section class="card" style="margin-top:16px"><h3>New milestone</h3><label class="fld">Pair</label><div class="chips">${ms.map((m) => `<button class="chip ${m.pair === msDraft.pair ? 'on' : ''}" data-mp="${m.pair}">${pairLabel(m.pair)}</button>`).join('')}</div>
+  <label class="fld" style="margin-top:14px">Challenge and level <span class="muted">(the ones you make least first)</span></label>
+  <div class="opts">${options.map((o) => `<button class="opt ${sel === o ? 'on' : ''}" data-mi="${o.id}" data-ml="${o.level}"><b>${CH[o.id].name}</b> <span class="tag ${o.level}">${o.level}</span><span class="small muted">${o.rate == null ? 'not measured yet' : `you ${pct(o.rate)} of ${o.t.n} games · average ${pct(TARGET[o.level])}`}</span></button>`).join('')}</div>
   <div class="row" style="margin-top:14px"><label class="fld" for="mt" style="margin:0">Times</label><select id="mt">${[1, 2, 3, 5].map((n) => `<option ${n === msDraft.target ? 'selected' : ''}>${n}</option>`).join('')}</select>
-  <span class="muted small">${sel ? `${CH[sel.id].name} ${sel.level} with ${pairLabel(msDraft.pair)}, ${msDraft.target} time${msDraft.target > 1 ? 's' : ''}: <b style="color:var(--beam)">+${pts} points</b>` : 'Pick a challenge.'}</span>
-  <button class="btn" id="msgo" ${sel ? '' : 'disabled'}>Set milestone</button></div></div>
-  <h2>Your milestones</h2>${S.milestones.length ? `<div class="grid">${S.milestones.slice().reverse().map(milestoneCard).join('')}</div>` : '<p class="muted">None yet.</p>'}
-  <p class="small muted">Every ranked game with that champion and role counts, not only locked ones. You have <b>${S.points}</b> points.</p>`;
-  app.querySelectorAll('[data-mp]').forEach((b) => (b.onclick = () => { msDraft = { ...msDraft, pair: b.dataset.mp, id: null, level: null }; viewMilestones(); }));
-  app.querySelectorAll('[data-mi]').forEach((b) => (b.onclick = () => { msDraft.id = b.dataset.mi; msDraft.level = b.dataset.ml; const y = scrollY; viewMilestones(); scrollTo(0, y); }));
-  $('#mt').onchange = (e) => { msDraft.target = Number(e.target.value); const y = scrollY; viewMilestones(); scrollTo(0, y); };
-  const go = $('#msgo');
-  if (go) go.onclick = () => { if (!sel) return; S.milestones.push({ id: sel.id, level: sel.level, pair: msDraft.pair, target: msDraft.target, done: 0, points: pts, status: 'active', at: S.now }); msDraft = null; save(); toast('Milestone set: play your games, the check counts them.'); viewMilestones(); };
-}
-
-// ---------- picking a pair and 3 challenges: training and contests ----------
-let draft = null;
-function viewPick(kind, ticket) {
-  if (needAccount()) return;
-  const p = P();
-  if (kind === 'contest' && ticket > 0 && !S.verified) { location.hash = '#/verify'; return; }
-  const ms = mains();
-  const champs = [...new Set([...ms.map((m) => splitPair(m.pair).champ), ...pairKeys.map((k) => splitPair(k).champ).sort((a, b) => champName(a).localeCompare(champName(b)))])];
-  if (!draft || draft.kind !== kind || draft.ticket !== ticket) {
-    const first = ms[0].pair;
-    draft = { kind, ticket, champ: splitPair(first).champ, pair: first, picks: [] };
-  }
-  const rolesOf = (c) => Object.keys(ROLES).filter((r) => D.pairs[`${r}|${c}`]);
-  const r = rec();
-  const offers = offersOf(draft.pair);
-  const pts = draft.picks.reduce((a, x) => a + POINTS[x.level], 0);
-  const strong = ms.slice(0, 3).map((m) => ({ ...m, best: edges(m.pair).filter((e) => e.edge > 0).slice(0, 3) }));
-  const title = kind === 'training' ? 'Lock a training game' : ticket ? `Sign up · ${euro(ticket)} contest` : 'Sign up · free contest';
-  const ci = champs.indexOf(draft.champ);
-  app.innerHTML = `<h1>${title}</h1><p class="sub">${kind === 'training' ? 'Free. Judged exactly like a contest game.' : 'Nothing is charged now: the ticket is taken only when the check finds your next game with this champion and role.'} Thresholds are those of ${/^[AEIOU]/.test(p.tier) ? 'an' : 'a'} ${tierName(p.tier)} player.</p>
-  <div class="carousel" aria-label="Champions"><button class="cnav" data-cstep="-1" aria-label="Previous champion">‹</button><div class="ctrack" id="ctrack">${champs.map((c, i) => `<button class="citem ${i === ci ? 'on' : ''}" data-champ="${c}" style="--d:${Math.min(3, Math.abs(i - ci))}">${icon(c)}<span>${champName(c)}</span></button>`).join('')}</div><button class="cnav" data-cstep="1" aria-label="Next champion">›</button></div>
-  <div class="row" style="justify-content:center;margin:8px 0 4px">${rolesOf(draft.champ).map((ro) => `<button class="chip ${draft.pair === `${ro}|${draft.champ}` ? 'on' : ''}" data-role="${ro}">${ROLES[ro]}</button>`).join('')}</div>
-  <p class="small muted" style="text-align:center">${(ms.find((m) => m.pair === draft.pair) || { games: 0 }).games} of your games with ${pairLabel(draft.pair)}</p>
-  <h2>Your strongest pairs</h2><div class="grid">${strong.map((s) => `<button class="card strong ${draft.pair === s.pair ? 'on' : ''}" data-strong="${s.pair}"><div class="row">${icon(splitPair(s.pair).champ)}<div><b>${pairLabel(s.pair)}</b><div class="small muted">${s.games} games</div></div></div><div style="margin-top:8px">${s.best.length ? s.best.map((e) => `<span class="tag ok">${CH[e.id].name} +${Math.round(e.edge * 100)}</span>`).join(' ') : '<span class="small muted">no clear strength yet</span>'}</div></button>`).join('')}</div>
-  <h2 id="step2" style="scroll-margin-top:90px">Three challenges for ${pairLabel(draft.pair)}</h2><p class="muted small">Any mix of levels. Easy ${POINTS.easy}, medium ${POINTS.medium}, hard ${POINTS.hard} points. Under each level: how often you made it.</p>
-  <div class="grid chgrid">${D.challenges.filter((c) => offers[c.id]).map((c) => {
-    const chosen = draft.picks.find((x) => x.id === c.id);
-    return `<div class="ch ${chosen ? 'on' : ''}"><div class="row between"><h3>${c.name}</h3><span class="tag">${c.family}</span></div>
-    <p class="small muted">${challengeText(draft.pair, c.id, chosen ? chosen.level : LEVELS.find((l) => offers[c.id][LEVELS.indexOf(l)] != null), p.tier)}</p>
-    <div class="levels">${LEVELS.map((l, i) => { const t = r[`${draft.pair}#${c.id}#${l}`]; const off = offers[c.id][i] == null; return `<button class="lv ${chosen && chosen.level === l ? 'on' : ''}" data-ch="${c.id}" data-lv="${l}" ${off ? 'disabled title="Not offered: not fair enough for this pair at this level"' : ''}><b>${l} · ${POINTS[l]}</b>${off ? 'not offered' : `${fmt(c.id, lineOf(draft.pair, c.id, l, true, p.tier))}<span class="you">${t && t.n >= 3 ? `you ${pct(t.hits / t.n)}` : '&nbsp;'}</span>`}</button>`; }).join('')}</div></div>`;
-  }).join('')}</div>
-  <div class="card hi lockbar"><div class="row between"><div><b>${draft.picks.length}/3 challenges</b> · up to ${pts} points<div style="margin-top:6px">${picksHtml(draft.picks)}</div></div>
-  <button class="btn" id="lock" ${draft.picks.length === 3 ? '' : 'disabled'}>${kind === 'training' ? 'Lock and train' : 'Lock and sign up'}</button></div>
-  ${kind === 'contest' && ticket > S.balance ? `<p class="small" style="color:var(--bad);margin-top:8px">Your balance (${euro(S.balance)}) does not cover this ticket.</p>` : ''}</div>`;
-  const tr = $('#ctrack'), on = tr.querySelector('.citem.on');
-  if (on) tr.scrollLeft = on.offsetLeft - tr.clientWidth / 2 + on.clientWidth / 2;
-  const setChamp = (c) => {
-    const roles = rolesOf(c);
-    const mine = ms.find((m) => splitPair(m.pair).champ === c);
-    draft.champ = c; draft.pair = mine ? mine.pair : `${roles[0]}|${c}`; draft.picks = [];
-    const y = scrollY; viewPick(kind, ticket); scrollTo(0, y);
-  };
-  app.querySelectorAll('[data-champ]').forEach((b) => (b.onclick = () => setChamp(b.dataset.champ)));
-  app.querySelectorAll('[data-cstep]').forEach((b) => (b.onclick = () => setChamp(champs[(ci + Number(b.dataset.cstep) + champs.length) % champs.length])));
-  app.querySelectorAll('[data-role]').forEach((b) => (b.onclick = () => { draft.pair = `${b.dataset.role}|${draft.champ}`; draft.picks = []; const y = scrollY; viewPick(kind, ticket); scrollTo(0, y); }));
-  app.querySelectorAll('[data-strong]').forEach((b) => (b.onclick = () => {
-    const s = strong.find((x) => x.pair === b.dataset.strong);
-    draft.pair = s.pair; draft.champ = splitPair(s.pair).champ;
-    draft.picks = s.best.map((e) => ({ id: e.id, level: e.level }));
-    viewPick(kind, ticket); $('#step2').scrollIntoView({ block: 'start' });
-  }));
-  app.querySelectorAll('[data-ch]').forEach((b) => (b.onclick = () => {
-    const { ch, lv } = b.dataset;
-    const at = draft.picks.findIndex((x) => x.id === ch);
-    if (at >= 0 && draft.picks[at].level === lv) draft.picks.splice(at, 1);
-    else if (at >= 0) draft.picks[at].level = lv;
-    else if (draft.picks.length < 3) draft.picks.push({ id: ch, level: lv });
-    else { toast('Three challenges: remove one first.'); return; }
-    const y = scrollY; viewPick(kind, ticket); scrollTo(0, y);
-  }));
-  const lock = $('#lock');
-  if (lock) lock.onclick = () => {
-    if (kind === 'contest' && ticket > S.balance) { toast('You need at least one ticket in your balance to sign up.'); return; }
-    S.signups.push({ id: uid('S'), kind, ticket: kind === 'training' ? 0 : ticket, pair: draft.pair, picks: draft.picks.map((x) => ({ ...x })), at: S.now, status: 'waiting' });
-    draft = null; save(); toast('Locked. Play your game: the next check will find it.');
-    location.hash = kind === 'training' ? '#/train' : '#/contests';
-  };
+  <button class="btn" id="msgo" ${sel ? '' : 'disabled'}>Set milestone</button></div></section>`;
+  const keep = () => { const y = scrollY; viewMilestones(head); scrollTo(0, y); };
+  app.querySelectorAll('[data-mp]').forEach((b) => (b.onclick = () => { msDraft = { ...msDraft, pair: b.dataset.mp, id: null, level: null }; keep(); }));
+  app.querySelectorAll('[data-mi]').forEach((b) => (b.onclick = () => { msDraft.id = b.dataset.mi; msDraft.level = b.dataset.ml; keep(); }));
+  $('#mt').onchange = (e) => { msDraft.target = Number(e.target.value); keep(); };
+  $('#msgo').onclick = () => { if (!sel) return; S.milestones.push({ id: sel.id, level: sel.level, pair: msDraft.pair, target: msDraft.target, done: 0, status: 'active', at: S.now }); msDraft = null; save(); toast('Milestone set.'); keep(); };
 }
 
 // ---------- contest area ----------
-function contestCard(c) {
-  const me = c.entries.find((e) => e.you);
-  const rows = [...c.entries].sort((a, b) => b.total - a.total);
-  const place = me ? (c.state === 'done' ? me.place : rows.findIndex((e) => e.total === me.total) + 1) : null;
-  return `<a class="card ccard" href="#/contest/${c.id}"><div class="row between"><h3>${c.ticket ? euro(c.ticket) : 'Free'} contest</h3><span class="tag ${c.state === 'open' ? 'wait' : 'ok'}">${c.state === 'open' ? 'open' : 'finished'}</span></div>
-  <div class="bar" style="margin:10px 0 6px"><i style="width:${(c.entries.length / SEATS) * 100}%"></i></div>
-  <p class="small muted">${c.entries.length} of ${SEATS} games${me ? ` · you: ${me.total} pts, ${c.state === 'done' ? '' : 'now '}${place}°${me.prize ? `, won ${euro(me.prize)}` : ''}` : ''}</p></a>`;
-}
-function viewContests() {
+const placeOf = (c) => { const me = ranked(c).find((e) => e.you); return me ? me._place : null; };
+function viewLobby() {
   if (needAccount()) return;
-  const mineOpen = Object.values(S.contests).filter((c) => c.state === 'open' && c.entries.some((e) => e.you));
-  const mineDone = Object.values(S.contests).filter((c) => c.state === 'done' && c.entries.some((e) => e.you)).sort((a, b) => b.closedAt - a.closedAt);
+  const open = (t) => Object.values(S.contests).filter((c) => c.state === 'open' && c.ticket === t);
+  const prog = Object.values(S.contests).filter((c) => c.state === 'open' && c.entries.some((e) => e.you));
   const waiting = S.signups.filter((s) => s.kind === 'contest' && active(s));
-  const past = S.signups.filter((s) => s.kind === 'contest' && !active(s)).slice(-6).reverse();
-  const open = Object.values(S.contests).filter((c) => c.state === 'open' && !c.entries.some((e) => e.you));
-  app.innerHTML = `<div class="walletbar"><div><p class="eyebrow">Your balance</p><div class="big">${euro(S.balance)}</div><p class="small muted">Play money in this demo. The ticket is taken only when your game enters a contest.</p></div>
-  <div class="row"><button class="btn ghost" disabled title="Not in the demo">Add funds</button><button class="btn ghost" disabled title="Not in the demo">Withdraw</button></div></div>
-  ${S.verified ? '' : '<div class="note">Prize contests need a verified account. <a href="#/verify">Verify your identity</a>. Free contests are open to everyone.</div>'}
-  <div class="note warn"><b>Fair play.</b> Zero tolerance: abuse is punished directly, and the ban is on you as a person, not on your game account. No smurfs, no shared accounts.</div>
-  <h2>Join a contest</h2><div class="grid">${TICKETS.map((t) => { const off = t > S.balance || (t > 0 && !S.verified); return `<div class="card ctype ${t ? 'hi' : ''}"><div class="row between"><h3>${t ? `${euro(t)} contest` : 'Free contest'}</h3><span class="tag gold">${t ? `1st ${euro(t * 2)}` : 'no prizes'}</span></div>
-    ${t ? `<div class="plist"><span>1st-4th</span><b>${euro(t * 2)} to ${euro(t * 1.2)}</b><span>5th-12th</span><b>${euro(t)} back</b><span>13th-14th</span><b>${euro(t * 0.8)}</b></div>` : '<div class="plist"><span>Prizes</span><b>none</b><span>Account</span><b>basic is enough</b></div>'}
-    ${off ? `<button class="btn" disabled>${t > S.balance ? 'Balance too low' : 'Verify to join'}</button>` : `<a class="btn" href="#/join/${t}">Sign up</a>`}</div>`; }).join('')}</div>
-  ${checkBar(true)}
-  <h2>Waiting for your game (${waiting.length})</h2>${waiting.length ? `<div class="grid">${waiting.map(signupCard).join('')}</div>` : '<p class="muted">Nothing locked.</p>'}
-  ${mineOpen.length ? `<h2>Your contests in progress</h2><div class="grid">${mineOpen.map(contestCard).join('')}</div>` : ''}
-  ${mineDone.length ? `<h2>Your finished contests</h2><div class="grid">${mineDone.map(contestCard).join('')}</div>` : ''}
-  ${past.length ? `<h2>Past sign-ups</h2><div class="grid">${past.map(signupCard).join('')}</div>` : ''}
-  <h2>Other open contests</h2><div class="grid">${open.map(contestCard).join('')}</div>
-  <div class="card tips"><h3>Good to know</h3><ul class="small">
-  <li>Sign up to several contests at once: each one waits for your next game with its champion and role.</li>
-  <li>Your balance can never fall short: when a game enters a contest, sign-ups your balance no longer covers are removed, at no cost.</li>
-  <li>Unlocking runs a check at once. If you are in a game, it is refused; otherwise it takes effect after 1 hour.</li>
-  <li>Lock challenges you are strong at: your home shows them, against your own tier.</li></ul></div>`;
+  app.innerHTML = `<div class="walletbar"><div><p class="eyebrow">Wallet</p><div class="big">${euro2(S.balance)}</div><p class="small muted">Play money in this demo. The ticket is taken only when your game enters a contest. ${rl('contests')}</p></div>
+  <div class="row"><button class="btn ghost" data-deposit>Deposit</button><button class="btn ghost" data-withdraw>Withdraw</button><a href="#/wallet">Movements →</a></div></div>
+  ${S.verified ? '' : '<div class="note"><b>Verify your identity to play for prizes.</b> Everything here is visible with a base account; joining needs a verified one. <a class="btn small" href="#/verify">Verify</a></div>'}
+  <h2>Join a contest</h2><div class="grid3">${TICKETS.map((t) => { const o = open(t); const full = o.reduce((m, c) => Math.max(m, c.entries.length), 0); const mine = waiting.filter((s) => s.ticket === t).length;
+    return `<div class="card ctype"><div class="row between"><span class="ticket">${euro(t)}</span><span class="tag gold">20 players</span></div>
+    <dl class="plist"><dt>Prize pool</dt><dd>${euro(t * SEATS * 0.8)}</dd><dt>1st place</dt><dd>${euro(t * 2)}</dd><dt>Open now</dt><dd>${o.length} · fullest ${full}/20</dd><dt>You</dt><dd>${mine ? `${mine} waiting` : '—'}</dd></dl>
+    <a class="btn" href="#/join/${t}">Join</a></div>`; }).join('')}</div>
+  <p class="small"><a href="#/rules/contests">Prize table ›</a></p>
+  <h2>In progress</h2>${prog.length ? `<div class="list">${prog.map((c) => `<a class="item link" href="#/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>#${num(c.id)} · ${euro(c.ticket)}</b><div class="small muted">${c.entries.length}/${SEATS} games</div></div><span class="small muted">you</span><span class="big">${ord(placeOf(c))}</span></div></a>`).join('')}</div>` : '<p class="muted">None of your games is in an open contest.</p>'}
+  <h2>Waiting for your game</h2>${waiting.length ? `<div class="list">${waiting.map(signupRow).join('')}</div>` : '<p class="muted">Nothing locked.</p>'}
+  ${checkBar()}
+  <div class="note warn"><b>Zero tolerance:</b> abuse is punished directly. No smurfs, no shared accounts. Bans are on the person, not the game account. ${rl('fairplay')}</div>
+  <section class="steps"><h2>How it works</h2><ol>
+  <li><b>Lock</b> a champion, a role and 3 challenges. Nothing is charged. ${rl('signups')}</li>
+  <li><b>Play</b> ranked solo when you want. Nothing on screen during the game.</li>
+  <li><b>Check:</b> your first game with that pair after locking enters a contest; the ticket is taken then. ${rl('signups')}</li>
+  <li><b>Leaderboard:</b> 20 games, measured against each player's own tier. 80% of tickets go back as prizes. ${rl('contests')}</li></ol></section>`;
+}
+let joinDraft = null;
+function viewJoin(ticket) {
+  if (needAccount()) return;
+  if (!TICKETS.includes(ticket)) { location.hash = '#/contests'; return; }
+  if (!S.verified) { S.afterVerify = `#/join/${ticket}`; location.hash = '#/verify'; return; }
+  const tier = P().tier;
+  if (!joinDraft || joinDraft.ticket !== ticket) joinDraft = newDraft('contest', ticket);
+  const d = joinDraft;
+  const pp = pairPicker(d);
+  const offers = offersOf(d.pair), r = rec();
+  const pts = d.picks.reduce((a, x) => a + POINTS[x.level], 0);
+  const slot = (i) => { const p = d.picks[i]; return `<div class="slot ${p ? 'full' : ''}"><span class="n">${i + 1}</span>${p ? `<b>${CH[p.id].name}</b> <span class="tag ${p.level}">${p.level}</span> <button class="x" data-rm="${i}" aria-label="Remove">×</button>` : '<span class="muted">empty</span>'}</div>`; };
+  app.innerHTML = `<p><a href="#/contests">← Lobby</a></p><div class="hello"><div><p class="eyebrow">${euro(ticket)} contest · 20 players · prize pool ${euro(ticket * SEATS * 0.8)}</p><h1>Join</h1></div><div class="stepper"><span class="${d.pair ? 'on' : ''}">① Pair</span><span class="${d.picks.length ? 'on' : ''}">② Challenges</span><span class="${d.picks.length === 3 ? 'on' : ''}">③ Lock</span></div></div>
+  <h2>① Pair</h2><section class="card">${pp.html}</section>
+  <h2 id="step2">② Three challenges for ${pairLabel(d.pair)}</h2><div class="slots">${[0, 1, 2].map(slot).join('')}</div>
+  <p class="small muted">Thresholds for a ${tierName(tier)} player. Under each level: how often your signed-up games made it. ${rl('challenges')}</p>
+  <div class="grid chgrid">${D.challenges.filter((c) => offers[c.id]).map((c) => {
+    const chosen = d.picks.find((x) => x.id === c.id);
+    return `<div class="ch ${chosen ? 'on' : ''}"><div class="row between"><h3>${c.name}</h3><span class="tag">${c.family}</span></div>
+    <p class="small muted">${challengeText(d.pair, c.id, chosen ? chosen.level : LEVELS.find((l) => offers[c.id][LEVELS.indexOf(l)] != null), tier)}</p>
+    <div class="levels">${LEVELS.map((l, i) => { const t = r[`${d.pair}#${c.id}#${l}`]; const off = offers[c.id][i] == null; return `<button class="lv ${chosen && chosen.level === l ? 'on' : ''}" data-ch="${c.id}" data-lv="${l}" ${off ? 'disabled title="Not offered for this pair at this level"' : ''}><b>${l} · ${POINTS[l]}</b>${off ? 'not offered' : `${lineText(d.pair, c.id, l, tier)}<span class="you">${t ? (t.n < 5 ? `you ${pct(t.hits / t.n)} · few data` : `you ${pct(t.hits / t.n)}`) : 'no games yet'}</span>`}</button>`; }).join('')}</div></div>`;
+  }).join('')}</div>
+  <div class="card lockbar gold"><div class="row between"><div><b>③ ${pairLabel(d.pair)}</b> · ${d.picks.length ? d.picks.map((p) => `${CH[p.id].name} ${LV[p.level]}`).join(' · ') : 'pick 3 challenges'} · up to ${pts} pts
+  <div class="small muted">Ticket ${euro(ticket)} · <b>nothing is charged now</b>: the ticket is taken when your game enters a contest. First game with this pair after locking · no changes after locking · unlocking takes 1 hour. ${rl('signups')}</div>
+  ${ticket > S.balance ? `<div class="small l">Your balance (${euro2(S.balance)}) does not cover this ticket.</div>` : ''}</div>
+  <button class="btn" id="lock" ${d.picks.length === 3 && ticket <= S.balance ? '' : 'disabled'}>Lock</button></div></div>`;
+  pp.bind(() => viewJoin(ticket));
+  const keep = () => { const y = scrollY; viewJoin(ticket); scrollTo(0, y); };
+  app.querySelectorAll('[data-ch]').forEach((b) => (b.onclick = () => {
+    const { ch, lv } = b.dataset;
+    const at = d.picks.findIndex((x) => x.id === ch);
+    if (at >= 0 && d.picks[at].level === lv) d.picks.splice(at, 1);
+    else if (at >= 0) d.picks[at].level = lv;
+    else if (d.picks.length < 3) d.picks.push({ id: ch, level: lv });
+    else { toast('Three challenges: remove one first.'); return; }
+    keep();
+  }));
+  app.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { d.picks.splice(Number(b.dataset.rm), 1); keep(); }));
+  $('#lock').onclick = () => {
+    if (d.picks.length !== 3 || ticket > S.balance) return;
+    S.signups.push({ id: uid('S'), kind: 'contest', ticket, pair: d.pair, picks: d.picks.map((x) => ({ ...x })), at: S.now, status: 'waiting' });
+    joinDraft = null; save(); toast('Locked. Nothing charged: play your game, then check.');
+    location.hash = '#/mine';
+  };
+}
+function viewMine(tab) {
+  if (needAccount()) return;
+  const t = ['progress', 'finished'].includes(tab) ? tab : 'waiting';
+  const mineC = Object.values(S.contests).filter((c) => c.entries.some((e) => e.you));
+  let body = '';
+  if (t === 'waiting') {
+    const list = S.signups.filter((s) => s.kind === 'contest');
+    const act = list.filter(active), ended = list.filter((s) => !active(s) && s.status !== 'played').slice(-6).reverse();
+    body = `${checkBar()}${act.length ? `<div class="list">${act.map(signupRow).join('')}</div>` : '<p class="muted">Nothing locked. <a href="#/contests">Join a contest</a>.</p>'}${ended.length ? `<h2>Ended sign-ups</h2><div class="list">${ended.map(signupRow).join('')}</div>` : ''}`;
+  } else if (t === 'progress') {
+    const l = mineC.filter((c) => c.state === 'open');
+    body = l.length ? `<div class="list">${l.map((c) => { const me = ranked(c).find((e) => e.you); return `<a class="item link" href="#/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>#${num(c.id)} · ${euro(c.ticket)}</b><div class="small muted">${c.entries.length}/${SEATS} games · ${me.total} pts</div></div><span class="big">${ord(me._place)}</span></div></a>`; }).join('')}</div>` : '<p class="muted">No open contest with your games.</p>';
+  } else {
+    const l = mineC.filter((c) => c.state === 'done').sort((a, b) => b.closedAt - a.closedAt);
+    body = l.length ? `<div class="list">${l.map((c) => { const me = c.entries.find((e) => e.you); return `<a class="item link" href="#/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>#${num(c.id)} · ${euro(c.ticket)}</b><div class="small muted">${day(c.closedAt)} · ${me.total} pts</div></div><span class="big">${ord(me.place)}</span><span class="${me.prize ? 'w' : 'muted'}">${me.prize ? `+${euro2(me.prize)}` : 'no prize'}</span></div></a>`; }).join('')}</div>` : '<p class="muted">No finished contest yet.</p>';
+  }
+  app.innerHTML = `<h1>My contests</h1>${tabs([['#/mine', 'Waiting', 'waiting'], ['#/mine/progress', 'In progress', 'progress'], ['#/mine/finished', 'Finished', 'finished']], t)}${body}`;
+}
+const openRows = new Set();
+function viewContest(id) {
+  if (needAccount()) return;
+  const c = S.contests[id];
+  if (!c) { app.innerHTML = '<p>Contest not found. <a href="#/contests">Lobby</a></p>'; return; }
+  const rows = c.state === 'done' ? [...c.entries].sort((a, b) => a.place - b.place || a.at - b.at).map((e) => ({ ...e, _place: e.place, _prize: e.prize, _tie: c.entries.filter((x) => x.place === e.place).length > 1 })) : ranked(c);
+  const zoneOf = (p) => (PRIZE_X[p - 1] > 1 ? 'top' : PRIZE_X[p - 1] === 1 ? 'back' : PRIZE_X[p - 1] > 0 ? 'part' : 'none');
+  const ZONE = { top: 'Prize', back: 'Ticket back', part: '0.8× ticket', none: 'No prize' };
+  const me = rows.find((e) => e.you);
+  const above = me && rows.filter((e) => e._place < me._place).pop();
+  let lastZone = null;
+  const html = rows.map((e, i) => {
+    const z = zoneOf(e._place);
+    const sep = z !== lastZone ? `<tr class="sep z-${z}"><td colspan="5"><span>${ZONE[z]}</span></td></tr>` : '';
+    lastZone = z;
+    const k = `${id}:${i}`;
+    const res = e.results.map((r) => `<span class="res ${r.full ? 'ok' : r.frac > 0 ? 'part' : 'no'}" title="${CH[r.id].name} ${r.level}: ${fmt(r.id, r.value)} for ${fmt(r.id, r.hi)}">${r.full ? '✓' : r.frac > 0 ? '◐' : '✗'} ${CH[r.id].name} ${LV[r.level]}</span>`).join('');
+    return `${sep}<tr class="${e.you ? 'you' : ''} z-${z}" data-row="${k}"><td><span class="place">${e._tie ? '=' : ''}${e._place}</span></td>
+    <td><div class="row nowrap">${icon(splitPair(e.pair).champ)}<div><b>${esc(e.name)}</b>${e.you ? ' <span class="tag gold">you</span>' : ''}<div class="small muted">${tierName(e.tier)} · ${pairLabel(e.pair)}</div></div></div></td>
+    <td class="chs">${res}</td><td class="pts"><b class="kpi">${e.total}</b></td><td class="prize">${e._prize ? euro2(e._prize) : '<span class="muted">—</span>'}</td></tr>
+    ${openRows.has(k) ? `<tr class="detail"><td></td><td colspan="4">${e.results.map((r) => `<div class="small">${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span> ${fmt(r.id, r.value)} for a line of ${fmt(r.id, r.hi)} → <b>${r.points}</b> pts</div>`).join('')}</td></tr>` : ''}`;
+  }).join('');
+  app.innerHTML = `<p><a href="#/contests">← Lobby</a></p><div class="hello"><div><p class="eyebrow">${euro(c.ticket)} contest · prize pool ${euro(c.ticket * SEATS * 0.8)} · rules v1 ${rl('changes', '')}</p><h1>Contest #${num(c.id)}</h1>
+  <p class="sub">${c.state === 'open' ? `<span class="tag wait">Open ${c.entries.length}/${SEATS}</span> Provisional: it changes as games come in.` : `<span class="tag ok">Finished</span> ${day(c.closedAt)}.${me ? (me.prize ? ` <b>${euro2(me.prize)} credited to your wallet.</b>` : '') + (above ? ` ${Math.round((above.total - me.total) * 10) / 10} points to the place above.` : '') : ''}`} Riot IDs only; each player measured against their own tier. Tap a row for the values.</p></div>
+  <div class="counter"><b>${c.entries.length}</b><span>of ${SEATS}</span></div></div>
+  <table class="lb"><tr class="head"><th>#</th><th>Player</th><th>Challenges</th><th style="text-align:right">Pts</th><th style="text-align:right">Prize</th></tr>${html}</table>
+  <p class="small muted" style="margin-top:8px">✓ made it · ◐ part of the way (window scoring) · ✗ missed. “=” is a tie: tied players share the prizes of the places they hold. ${rl('contests')}</p>`;
+  app.querySelectorAll('[data-row]').forEach((tr) => (tr.onclick = () => { const k = tr.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); const y = scrollY; viewContest(id); scrollTo(0, y); }));
+}
+function viewWallet() {
+  if (needAccount()) return;
+  const KIND = { deposit: 'Deposit', ticket: 'Ticket', prize: 'Prize', refund: 'Refund', withdrawal: 'Withdrawal' };
+  app.innerHTML = `<h1>Wallet</h1><p class="sub">Demo: play money. In the real product deposits and withdrawals go through a payment provider; bank details stay with them. ${rl('contests')}</p>
+  <div class="walletbar"><div><p class="eyebrow">Balance</p><div class="big">${euro2(S.balance)}</div></div><div class="row"><button class="btn ghost" data-deposit>Deposit</button><button class="btn ghost" data-withdraw>Withdraw</button></div></div>
+  <h2>Movements</h2><div class="tablewrap"><table class="num"><tr><th>Date</th><th>Movement</th><th>Contest</th><th style="text-align:right">Amount</th></tr>
+  ${S.ledger.slice().sort((a, b) => b.at - a.at).map((l) => `<tr><td>${day(l.at)} ${clock(l.at)}</td><td>${KIND[l.kind]}</td><td>${l.contestId ? `<a href="#/contest/${l.contestId}">#${num(l.contestId)}</a>` : '<span class="muted">—</span>'}</td><td style="text-align:right" class="${l.amount > 0 ? 'w' : ''}">${l.amount > 0 ? '+' : '−'}${euro2(Math.abs(l.amount))}</td></tr>`).join('')}</table></div>`;
 }
 function viewVerify() {
   if (needAccount()) return;
-  app.innerHTML = `<div class="narrow"><h1>Verify your identity</h1><p class="sub">Prize contests need a verified account: one person, one account. Your details are never shown to other players; in contests they see only your Riot ID.</p>
-  <form class="card form" id="vf" novalidate>
+  const back = S.afterVerify || '#/contests';
+  app.innerHTML = `<div class="narrow"><p class="eyebrow">Contest area</p><h1>Verify your identity</h1><p class="sub">Prizes are real money: we need to know who you are. It is also needed to use points. No other player ever sees this data: in contests they see only your Riot ID. ${rl('accounts')}</p>
+  ${S.verified ? '<div class="note"><b>Verified.</b> Prize contests are open to you.</div>' : `<form class="card form" id="vf" novalidate>
     <div class="row"><div><label class="fld" for="fn">First name</label><input type="text" id="fn" autocomplete="given-name"></div><div><label class="fld" for="ln">Last name</label><input type="text" id="ln" autocomplete="family-name"></div></div>
     <div><label class="fld" for="dob">Date of birth</label><input type="date" id="dob" autocomplete="bday"></div>
     <div><label class="fld" for="ad">Address</label><input type="text" id="ad" autocomplete="street-address"></div>
     <div class="row"><div><label class="fld" for="ci">City</label><input type="text" id="ci" autocomplete="address-level2"></div><div><label class="fld" for="pc">Postal code</label><input type="text" id="pc" autocomplete="postal-code"></div></div>
-    <div><label class="fld" for="dt">Document</label><select id="dt"><option>ID card</option><option>Passport</option><option>Driving licence</option></select><p class="small muted" style="margin-top:6px">In the real product the document is checked by an identity provider; Skybreak keeps only the result.</p></div>
-    <div class="row"><button class="btn" type="submit">Verify</button><button class="btn ghost" type="button" id="skip">Skip (demo)</button><a href="#/contests">Back</a></div>
-  </form></div>`;
-  const done = () => { S.verified = true; save(); toast('Account verified (demo). Prize contests are open.'); location.hash = '#/contests'; };
+    <fieldset class="radio"><legend class="fld">Document</legend><label><input type="radio" name="dt" checked> ID card</label><label><input type="radio" name="dt"> Passport</label><label><input type="radio" name="dt"> Driving licence</label></fieldset>
+    <p class="small muted">In the real product an identity provider checks the document; Skybreak keeps only the result. Status: <b>Not verified</b> → Pending → Verified or Rejected.</p>
+    <div class="row"><button class="btn" type="submit">Send to verification</button><button class="btn ghost" type="button" id="skip">Skip (demo)</button></div>
+  </form>`}</div>`;
+  if (S.verified) return;
+  const done = () => { S.verified = true; delete S.afterVerify; save(); toast('Verified (demo). Prize contests are open.'); location.hash = back; };
   $('#vf').onsubmit = (e) => { e.preventDefault(); if (!$('#fn').value || !$('#ln').value || !$('#dob').value) { toast('Fill in name and date of birth, or skip.'); return; } done(); };
   $('#skip').onclick = done;
 }
-function viewContest(id) {
-  const c = S.contests[id];
-  if (!c) { app.innerHTML = '<p>Contest not found. <a href="#/contests">Contests</a></p>'; return; }
-  const rows = [...c.entries].sort((a, b) => (c.state === 'done' ? a.place - b.place : b.total - a.total || a.at - b.at));
-  const placeOf = (i) => (c.state === 'done' ? rows[i].place : rows.findIndex((e) => e.total === rows[i].total) + 1);
-  const tied = (i) => rows.some((e, j) => j !== i && e.total === rows[i].total);
-  const zone = (p) => (!c.ticket ? '' : PRIZE_X[p - 1] > 1 ? 'z-top' : PRIZE_X[p - 1] === 1 ? 'z-back' : PRIZE_X[p - 1] > 0 ? 'z-part' : '');
-  const cut = (i) => c.ticket && (i === 3 || i === 11 || i === 13) && i < rows.length - 1;
-  app.innerHTML = `<p><a href="#/contests">← Contests</a></p><div class="hello"><div><h1>${c.ticket ? euro(c.ticket) : 'Free'} contest</h1>
-  <p class="sub">${c.state === 'open' ? `Open: ${c.entries.length} of ${SEATS} games. Provisional leaderboard, it changes as games come in.` : `Finished: final leaderboard${c.ticket ? `, ${euro(c.pool)} in prizes (80% of tickets)` : ''}.`} Players appear with their Riot ID only. Everyone is measured against their own tier, champion and role.</p></div>
-  <div class="counter"><b>${c.entries.length}</b><span>of ${SEATS}</span></div></div>
-  <table class="lb"><tr class="head"><th>#</th><th>Player</th><th>Challenges</th><th style="text-align:right">Points</th></tr>
-  ${rows.map((e, i) => `<tr class="${e.you ? 'you' : ''} ${zone(placeOf(i))} ${cut(i) ? 'cut' : ''}"><td><span class="place">${tied(i) ? '=' : ''}${placeOf(i)}</span></td>
-  <td><div class="row" style="flex-wrap:nowrap">${icon(splitPair(e.pair).champ)}<div><b>${esc(e.name)}</b>${e.you ? ' <span class="tag gold">you</span>' : ''}<div class="small muted">${tierName(e.tier)} · ${pairLabel(e.pair)}</div></div></div></td>
-  <td class="small chs">${e.results.map((r) => `<div>${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span> ${fmt(r.id, r.value)} → <b>${r.points}</b></div>`).join('')}</td>
-  <td class="pts"><span class="kpi" style="font-size:20px">${e.total}</span>${c.state === 'done' && c.ticket ? `<div class="small ${e.prize ? '' : 'muted'}">${e.prize ? euro(e.prize) : 'no prize'}</div>` : ''}</td></tr>`).join('')}</table>
-  ${c.ticket ? '<div class="legend"><span style="--c:var(--beam)">1st-4th: more than the ticket</span><span style="--c:#3a3424">5th-12th: ticket back</span><span style="--c:#2a2720">13th-14th: 80%</span><span style="--c:var(--panel2)">15th-20th: nothing</span></div>' : ''}
-  <p class="small muted" style="margin-top:8px">“=” marks a tie: tied players share the prizes of the places they hold.</p>`;
-}
 
-// ---------- rules and data ----------
-function viewRules() {
-  const sec = [['r-what', 'What Skybreak is'], ['r-acc', 'Accounts'], ['r-free', 'The free system'], ['r-ch', 'Challenges and points'], ['r-contest', 'Prize contests'], ['r-fair', 'Fair play'], ['r-data', 'Your data'], ['r-change', 'Changes']];
-  app.innerHTML = `<div class="rules"><h1>Rules</h1><p class="sub">The same for everyone, public before you sign up, changed only with notice.</p>
-  <nav class="toc">${sec.map(([id, n], i) => `<a href="#/rules" data-go="${id}">${i + 1}. ${n}</a>`).join('')}</nav>
-  <h2 id="r-what">1. What Skybreak is</h2><p>Skybreak measures how far above your level you play League of Legends, game after game. Before a ranked solo game you pick a champion, a role and 3 challenges; after the game Skybreak judges it against the average player of your tier with that champion and role. Two products on the same judgement:</p>
-  <ul><li><b>The free system:</b> training, your profile of strengths and weaknesses, milestones. Always free.</li><li><b>Prize contests:</b> 20 players, each plays when they want, and the best performance against their own tier wins.</li></ul><p>Nothing appears on your screen during the game: no overlay, no pop-ups.</p>
-  <h2 id="r-acc">2. Accounts</h2><div class="tablewrap"><table><tr><th></th><th>Basic account</th><th>Verified account</th></tr><tr><td>For</td><td>the free system and free contests</td><td>prize contests and the wallet</td></tr><tr><td>Needs</td><td>email, password, your Riot account linked with Riot Sign On</td><td>also a verified identity: name, date of birth, address, a document</td></tr></table></div>
-  <ul><li>One person has one Skybreak account and one linked Riot account.</li><li>Skybreak never asks for your Riot password.</li><li>In contests, other players see only your Riot ID, never your personal details.</li></ul>
-  <h2 id="r-free">3. The free system</h2><ul><li><b>Training:</b> lock a champion, a role and 3 challenges as in a contest; the game is judged and goes into your record. As many as you like.</li><li><b>Profile:</b> for your main champions, the challenges where you are above or below the average player of your tier, with tips to improve.</li><li><b>Milestones:</b> pick a champion and role, a challenge and a level you usually miss, and how many times. Make it and you earn Skybreak points. Points cannot be turned into money.</li></ul>
-  <h2 id="r-ch">4. Challenges and points</h2><ul><li><b>Fair</b> means a challenge happens as often as declared to anyone who plays that champion, in that role, at that tier, whether the game is won or lost. <b>Real</b> means better players make it happen more often.</li>
-  <li><b>Levels:</b> easy, the average player makes it in about 6 games out of 10; medium, about 1 in 3; hard, about 1 in 7. Points: ${POINTS.easy}, ${POINTS.medium}, ${POINTS.hard}.</li>
-  <li><b>Thresholds</b> are the same for everyone, per champion, role and tier, computed on everyone's public ranked games and never on yours. A challenge is offered to a pair only if it passes every test.</li>
-  <li><b>Window scoring:</b> reach the line of the chosen level and you get all its points; between the line below and that line, points grow in proportion; below it, nothing. Never more than the chosen level.</li><li>The score of a game is the sum of its 3 challenges.</li></ul>
-  <p class="small muted">How we measure: on ${D.facts.games.toLocaleString('en-GB')} ranked games (EUW), with thresholds fixed on older games and tested on newer ones, challenges happened 60.1%, 35.1% and 15.0% of the time. A player's results on odd and even games correlate ${D.facts.follow.toFixed(2)}; winning alone, ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most ×${D.facts.edgeChampion.toFixed(2)}.</p>
-  <div class="tablewrap"><table><tr><th>Challenge</th><th>What it measures</th></tr>${D.challenges.map((c) => `<tr><td><b>${c.name}</b><br><span class="small muted">${c.family}</span></td><td class="small">${c.text.replace(/\{x\}|\{xl\}/g, '<i>threshold</i>').replace(/\{y\d0\}/g, '…')}</td></tr>`).join('')}</table></div>
-  <h2 id="r-contest">5. Prize contests</h2>
-  <p><b>The wallet.</b> Your balance is in euro. A ticket is taken from it only when your game enters a contest; until then the balance stays yours and free.</p>
-  <div class="tablewrap"><table><tr><th>Contest</th><th>Ticket</th><th>Prizes</th></tr><tr><td>Free</td><td>0</td><td>none: the leaderboard</td></tr><tr><td>2 €, 5 €, 10 €</td><td>2 €, 5 €, 10 €</td><td>80% of the tickets go to the players</td></tr></table></div>
-  <p><b>Signing up and playing.</b></p><ol><li>Sign up to one or more contests. For each, lock a champion, a role and 3 challenges; the time is saved. After locking nothing changes. Nothing is charged.</li>
-  <li>Play. Your first ranked solo game with exactly that champion and role, started after the sign-up, is your game for that contest.</li>
-  <li>The check finds it: once a day for everyone with a sign-up, or whenever you press “Run a check”. Sign-ups not played by the daily check are removed, at no cost.</li>
-  <li>The game enters an open contest where you are not already, or opens a new one. That is when the ticket is taken.</li></ol>
-  <ul><li>Your balance can never fall short: after each game enters, sign-ups the remaining balance does not cover are removed.</li><li>Several sign-ups with the same pair go in order: the first game to the first sign-up. Each game counts for one contest; you are never twice in the same contest.</li></ul>
-  <p><b>Unlocking a sign-up.</b></p><ul><li>You can unlock a sign-up until its game has entered a contest. Unlocking runs a check at once.</li><li>If the check finds a valid game started after the sign-up, it enters the contest and the unlock does not apply.</li><li>If you are in a game at that moment, the unlock is refused: try again when it ends.</li><li>Otherwise the unlock takes effect after 1 hour, if no valid game started before your request. Your balance is not held during that hour.</li></ul>
-  <p><b>The contest.</b></p><ul><li>20 seats. It lasts until 20 games have entered; then final leaderboard and prizes.</li><li>While it is open you see the counter (for example 13 of 20) and the provisional leaderboard, with the other players' Riot IDs and their results challenge by challenge.</li><li>If it does not reach 20 games within the maximum time, it is cancelled and every ticket goes back to your balance.</li></ul>
-  <div class="tablewrap"><table><tr><th>Case</th><th>Rule</th></tr><tr><td>Remakes, games under 10 minutes</td><td>Do not count: no ticket taken, the sign-up keeps waiting.</td></tr><tr><td>Dodge</td><td>Not a game: nothing happens.</td></tr><tr><td>Surrender</td><td>Counts normally: a win for the winners, a loss for the side that surrendered.</td></tr><tr><td>Normal, flex, ARAM</td><td>Do not count.</td></tr></table></div>
-  <div class="tablewrap"><table><tr><th>Place</th><th>Prize</th><th>2 €</th><th>5 €</th><th>10 €</th></tr>${[['1st', 2], ['2nd', 1.7], ['3rd', 1.5], ['4th', 1.2], ['5th-12th', 1], ['13th-14th', 0.8], ['15th-20th', 0]].map(([n, x]) => `<tr><td>${n}</td><td>${x ? `×${x}` : '—'}${x === 1 ? ', ticket back' : ''}</td>${[200, 500, 1000].map((t) => `<td>${euro(t * x)}</td>`).join('')}</tr>`).join('')}</table></div>
-  <p><b>Ties:</b> players on the same points add up the prizes of the places they hold and split them equally.</p>
-  <h2 id="r-fair">6. Fair play</h2><p>Zero tolerance on contest fair play: abuse is punished directly. No smurfs, no accounts shared or played by someone else. The ban is on the person, not on the game account.</p>
-  <h2 id="r-data">7. Your data</h2><ul><li>Skybreak reads from Riot, through the official API and after you sign in with Riot: Riot ID, region, rank tier and your ranked solo games. Nothing during the game.</li><li>We keep your sign-ups, the games the checks found and how they were judged, your contests, your balance and its movements.</li><li>No player ratings, no data sold, nobody's personal details shown.</li><li>You can download your data and ask for it to be deleted. <a href="#/data">Your data</a></li></ul>
-  <h2 id="r-change">8. Changes</h2><p>The rules are the same for everyone and public before you sign up. They change only with notice; a contest already open finishes under the rules it started with.</p></div>`;
-  app.querySelectorAll('[data-go]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); document.getElementById(a.dataset.go).scrollIntoView({ behavior: 'smooth' }); }));
-}
-function viewData() {
-  const signed = S.profile != null;
-  const pair = (S._dataPair && D.pairs[S._dataPair]) ? S._dataPair : signed ? mains()[0].pair : 'MIDDLE|Ahri';
-  const tier = S._dataTier || (signed ? P().tier : 'GOLD');
-  app.innerHTML = `<h1>Your data</h1><p class="sub">Your games are yours. Here is everything Skybreak reads, keeps and computes, and every threshold in use.</p>
-  <div class="grid"><div class="card"><h3>What we read from Riot</h3><p class="small muted">Through Riot's official API, after you sign in with Riot: Riot ID, region, rank tier and your ranked solo games (champion, role, start, length, result and the statistics the challenges need). Nothing during the game.</p></div>
-  <div class="card"><h3>What we keep</h3><p class="small muted">Your account, sign-ups, the games the checks found and how each was judged, contests, milestones, balance and its movements. For verified accounts, the result of the identity check.</p></div>
-  <div class="card"><h3>What we never do</h3><p class="small muted">No player ratings, no data sold, no personal details shown to other players, nothing shown during your game.</p></div></div>
-  <h2>Every threshold</h2><div class="row" style="margin-bottom:10px"><select id="dp">${pairKeys.map((k) => `<option value="${k}" ${k === pair ? 'selected' : ''}>${pairLabel(k)}</option>`).join('')}</select><select id="dtr">${TIERS.map((t) => `<option value="${t}" ${t === tier ? 'selected' : ''}>${tierName(t)}</option>`).join('')}</select><span class="small muted">The real catalog (${D.generated}), with the correction for the tier.</span></div>
-  <div class="tablewrap"><table><tr><th>Challenge</th><th>Easy</th><th>Medium</th><th>Hard</th></tr>${D.challenges.map((c) => `<tr><td>${c.name}</td>${LEVELS.map((l) => { const w = lineOf(pair, c.id, l, true, tier), lo = lineOf(pair, c.id, l, false, tier); return `<td>${w == null ? '<span class="muted">not offered</span>' : Array.isArray((offersOf(pair)[c.id] || [])[LEVELS.indexOf(l)]) ? `${fmt(c.id, w)} win · ${fmt(c.id, lo)} loss` : fmt(c.id, w)}</td>`; }).join('')}</tr>`).join('')}</table></div>
-  ${signed ? `<h2>Everything this demo stored about you</h2><p class="small muted">In this demo it lives only in your browser.</p><div class="row"><button class="btn ghost" id="dl">Download my data (JSON)</button><button class="btn ghost" id="out">Sign out</button><button class="btn ghost" id="reset">Reset the demo</button></div>` : ''}`;
-  $('#dp').onchange = (e) => { S._dataPair = e.target.value; viewData(); };
-  $('#dtr').onchange = (e) => { S._dataTier = e.target.value; viewData(); };
-  if (!signed) return;
+// ---------- common ----------
+function viewAccount() {
+  if (needAccount()) return;
+  const f = S.signupForm || {};
+  app.innerHTML = `<div class="narrow"><h1>Account</h1>
+  <section class="card"><dl class="kv"><dt>Riot ID</dt><dd><b>${esc(P().name)}</b> · ${tierName(P().tier)} · EUW <span class="small muted">· can't be changed</span></dd>
+  <dt>Account</dt><dd>${S.verified ? '<span class="tag ok">Verified</span>' : '<span class="tag">Base</span> <a class="btn small" href="#/verify">Verify</a>'}</dd>
+  <dt>Email</dt><dd>${esc(f.email || 'demo@skybreak.gg')}</dd><dt>Language</dt><dd>${esc(f.language || 'English')}</dd><dt>News</dt><dd>${f.marketing ? 'Yes' : 'No'}</dd></dl></section>
+  <section class="card"><h3>Your data</h3><p class="small muted">We read from Riot your Riot ID, region, rank tier and ranked solo games, through the official API. We keep your sign-ups, the games found and how they were judged, contests, milestones, your balance and its movements. No player ratings, no data sold. ${rl('data')}</p>
+  <div class="row"><button class="btn ghost" id="dl">Download my data</button><button class="btn ghost" id="del">Delete account</button></div></section>
+  <section class="card"><h3>Demo</h3><div class="row"><button class="btn ghost" id="reset">Reset the demo</button><button class="btn ghost" data-signout>Sign out</button></div></section></div>`;
   $('#dl').onclick = () => {
-    const blob = new Blob([JSON.stringify({ account: { riotId: P().name, tier: P().tier, region: 'EUW', verified: S.verified, ...S.signupForm }, balanceCents: S.balance, points: S.points, signups: S.signups, milestones: S.milestones, games: S.games, contests: Object.values(S.contests).filter((c) => c.entries.some((e) => e.you)) }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ account: { riotId: P().name, tier: P().tier, region: 'EUW', verified: S.verified, ...S.signupForm }, balanceCents: S.balance, ledger: S.ledger, signups: S.signups, milestones: S.milestones, games: S.games }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'skybreak-my-data.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
-  $('#out').onclick = () => { S.profile = null; save(); location.hash = '#/signin'; };
-  $('#reset').onclick = () => { if (confirm('Reset the demo? Your simulated account, games and contests are deleted.')) { S = fresh(); save(); location.hash = '#/signin'; render(); } };
+  const wipe = () => { S = fresh({ guide: S.guide }); save(); location.hash = '#/signin'; render(); };
+  $('#del').onclick = () => { if (confirm('Delete the demo account? In the real product you first withdraw your balance and wait for open contests to finish.')) wipe(); };
+  $('#reset').onclick = () => { if (confirm('Reset the demo? Your simulated account, games and contests are deleted.')) wipe(); };
+}
+function viewSupport() {
+  app.innerHTML = `<div class="narrow"><h1>Support</h1><div class="card"><p>Questions about a game, a contest or your account: write to <a href="mailto:david@skybreak.gg">david@skybreak.gg</a>. Include your Riot ID and the contest number.</p><p class="small muted">The rules answer most questions: <a href="#/rules">Rules</a>.</p></div></div>`;
+}
+const RULES = [
+  ['what', 'What Skybreak is', `<p>Skybreak judges your ranked solo games against the average player of your tier with the same champion and role. The challenges and their thresholds are the same everywhere in the app. Two areas on the same judgement:</p>
+  <ul><li><b>Personal area</b> (free): Intelligence, Training and improvement contests, milestones.</li><li><b>Contest area</b> (prizes): contests of 20 players with a 2, 5 or 10 € ticket; 80% of tickets go back as prizes.</li></ul><p>Nothing appears on your screen during the game: no overlay, no pop-ups.</p>`],
+  ['accounts', 'Accounts', `<div class="tablewrap"><table><tr><th></th><th>Base</th><th>Verified</th></tr><tr><td>What you can do</td><td>the whole personal area; look at the contest lobby and leaderboards</td><td>also: prize contests, the wallet, using points</td></tr><tr><td>What it needs</td><td>email, password, country, the rules accepted, your Riot account linked with Riot Sign On</td><td>also: first and last name, date of birth, address, a document</td></tr></table></div>
+  <ul><li>One person has one Skybreak account and one Riot account.</li><li><b>The linked Riot account can never be changed.</b></li><li>Skybreak never asks for your Riot password.</li><li>In contests, other players see only your Riot ID.</li><li>You can download your data and ask for deletion; first withdraw your balance and wait for open contests to finish.</li></ul>`],
+  ['personal', 'Personal area', `<ul><li><b>Intelligence:</b> your signed-up games against your tier, per challenge (You), and everyone's thresholds by champion, role and tier (Explore). No rating, and no advice on which challenges to pick in contests.</li>
+  <li><b>Training:</b> sign up a game with a champion and role. The game is judged on all the challenges of the pair, the same as in contests, and you see your position among the players of your tier.</li>
+  <li><b>Improvement contests:</b> free, 20 training games, any tier. The leaderboard is by improvement: each game against its tier and against the player's own past training games on the same champion, the same role and the same pair. The number counts only inside the contest. The final formula is still open.</li>
+  <li><b>Milestones:</b> a challenge, a level and a number of times with one of your pairs. Signed-up games count by themselves.</li>
+  <li><b>Points</b> will be earned by improving, and will pay for coaching and other services; using them needs a verified account. They never become money. Not in the demo yet.</li></ul>`],
+  ['challenges', 'Challenges and scoring', `<ul><li><b>Fair</b> means a challenge happens as often as declared to anyone who plays that champion, in that role, at that tier, whether the game is won or lost. <b>Real</b> means better players make it happen more often.</li>
+  <li><b>Levels:</b> easy, the average player makes it in about 6 games out of 10; medium, about 1 in 3; hard, about 1 in 7. Points: ${POINTS.easy}, ${POINTS.medium}, ${POINTS.hard}.</li>
+  <li><b>Thresholds</b> are the same for everyone, per champion, role and tier, computed on everyone's public ranked games and never on yours. A challenge is offered to a pair only if it passes every test.</li>
+  <li><b>Window scoring:</b> reach the line of the chosen level and you get all its points; between the line below and that line, points grow in proportion; below it, nothing. Never more than the chosen level. A contest game scores the sum of its 3 challenges.</li></ul>
+  <p class="small muted">How we measure: on ${D.facts.games.toLocaleString('en-GB')} ranked games (EUW), with thresholds fixed on older games and tested on newer ones, challenges happened 60.1%, 35.1% and 15.0% of the time. A player's results on odd and even games correlate ${D.facts.follow.toFixed(2)}; winning alone, ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most ×${D.facts.edgeChampion.toFixed(2)}.</p>
+  <div class="tablewrap"><table><tr><th>Challenge</th><th>What it measures</th></tr>${D.challenges.map((c) => `<tr><td><b>${c.name}</b><br><span class="small muted">${c.family}</span></td><td class="small">${c.text.replace(/\{x\}|\{xl\}/g, '<i>threshold</i>').replace(/\{y\d0\}/g, '…')}</td></tr>`).join('')}</table></div>`],
+  ['signups', 'Sign-ups and checks', `<p>The same for Training and for prize contests.</p><ul><li><b>Lock:</b> the pair and the time, and in contests the 3 challenges with their levels. After locking nothing changes.</li>
+  <li><b>The game:</b> your first ranked solo game with exactly that champion and role, started after locking.</li><li><b>Queue:</b> several sign-ups with the same pair go in order, the first game to the first sign-up. Each game counts once; you are never twice in the same contest.</li>
+  <li><b>Checks:</b> one at the end of the day for everyone, and the Check my games button whenever you want.</li><li><b>At the end of the day, sign-ups not played are removed</b>, in Training and in contests, at no cost.</li>
+  <li><b>Unlocking:</b> runs a check at once. If a valid game is found, it counts and the unlock does not apply. If you are in a game, the unlock is refused. Otherwise it takes effect after 1 hour, if no valid game started before the request. In Training too, so a bad game can't be hidden.</li>
+  <li><b>Only signed-up games are analysed.</b></li></ul>
+  <div class="tablewrap"><table><tr><th>Case</th><th>Rule</th></tr><tr><td>Remakes, games under 10 minutes</td><td>Do not count: the sign-up keeps waiting.</td></tr><tr><td>Dodge</td><td>Not a game: nothing happens.</td></tr><tr><td>Surrender</td><td>Counts normally.</td></tr><tr><td>Normal, flex, ARAM</td><td>Do not count.</td></tr></table></div>`],
+  ['contests', 'Prize contests', `<ul><li><b>Wallet:</b> your balance is in euro. A ticket is taken only when your game enters a contest; until then the balance stays yours.</li>
+  <li><b>Your balance can never fall short:</b> after a game enters, sign-ups the remaining balance does not cover are removed, at no cost.</li>
+  <li><b>20 seats.</b> A contest lasts until 20 games have entered; then final leaderboard and prizes. While open you see the counter and the provisional leaderboard. If it does not fill within the maximum time, it is cancelled and every ticket goes back.</li></ul>
+  <div class="tablewrap"><table class="num"><tr><th>Place</th><th>Prize</th><th>2 €</th><th>5 €</th><th>10 €</th></tr>${[['1st', 2], ['2nd', 1.7], ['3rd', 1.5], ['4th', 1.2], ['5th-12th', 1], ['13th-14th', 0.8], ['15th-20th', 0]].map(([n, x]) => `<tr><td>${n}</td><td>${x ? `×${x}` : '—'}${x === 1 ? ', ticket back' : ''}</td>${TICKETS.map((t) => `<td>${euro2(t * x)}</td>`).join('')}</tr>`).join('')}</table></div>
+  <p><b>Ties:</b> players on the same points add up the prizes of the places they hold and split them equally. 80% of tickets go to the players.</p>`],
+  ['fairplay', 'Fair play', '<p>Zero tolerance on contest fair play: abuse is punished directly. No smurfs, no accounts shared or played by someone else. The ban is on the person, not on the game account.</p>'],
+  ['data', 'Your data', '<ul><li>Skybreak reads from Riot, through the official API and after you sign in with Riot: Riot ID, region, rank tier and your ranked solo games. Nothing during the game.</li><li>We keep your sign-ups, the games found and how they were judged, contests, milestones, your balance and its movements; for verified accounts, the result of the identity check.</li><li>No player ratings, no data sold, nobody\'s personal details shown.</li><li>You can download your data and ask for deletion from your Account.</li></ul>'],
+  ['changes', 'When rules change', '<p>The rules are the same for everyone and public before you sign up. They change only with notice; a contest already open finishes under the rules it started with (v1).</p>'],
+  ['open', 'Still open', '<ul><li>The maximum time of a contest that does not fill.</li><li>The hour of the end-of-day check and how many manual checks per day.</li><li>The final improvement formula.</li><li>How points are earned and what they pay for.</li></ul>'],
+];
+function viewRules(sec) {
+  app.innerHTML = `<div class="rules"><h1>Rules</h1><p class="sub">The same for everyone, public before you sign up, changed only with notice.</p>
+  <nav class="toc" aria-label="Sections">${RULES.map(([id, n], i) => `<a href="#/rules/${id}">${i < RULES.length - 1 ? `${i + 1}. ` : ''}${n}</a>`).join('')}</nav>
+  ${RULES.map(([id, n, body], i) => `<section id="r-${id}" class="${id === sec ? 'hl' : ''}"><h2>${i < RULES.length - 1 ? `${i + 1}. ` : ''}${n}</h2>${body}</section>`).join('')}</div>`;
+  if (sec && document.getElementById(`r-${sec}`)) requestAnimationFrame(() => document.getElementById(`r-${sec}`).scrollIntoView({ block: 'start' }));
+}
+
+// ---------- Riot reviewer guide ----------
+const GUIDE = [
+  ['Accounts and Riot Sign On', () => (S.profile == null ? '#/signup' : '#/account'), 'A base account needs an email and a Riot account linked with Riot Sign On. We read the Riot ID, region, rank tier and ranked solo games, never the password, nothing during the game. The Riot account can never be changed. In this demo you pick one of 5 real EUW players.'],
+  ['Training: sign up, check, report', () => '#/train/new', 'Lock a champion and role, play, then press Check my games. Only signed-up games are analysed. The report judges the game on every challenge of the pair, against the player\'s own tier.'],
+  ['Intelligence', () => '#/intel', 'The player\'s signed-up games against their tier (You), and everyone\'s thresholds (Explore). No rating, and no advice on which challenges to pick in a contest.'],
+  ['Improvement contests: the free tier', () => '#/train/improvement', 'Free contests of 20 training games. The leaderboard rewards improvement against the tier and against the player\'s own past games. The number counts only inside the contest.'],
+  ['Contest area: verify, wallet, join', () => '#/contests', 'Prize contests need a verified identity. The ticket (2, 5 or 10 €) is taken only when the game enters a contest. In Join the player picks the pair and 3 challenges; nothing is pre-filled.'],
+  ['A finished contest', () => { const c = Object.values(S.contests).find((x) => x.state === 'done' && x.entries.some((e) => e.you)) || Object.values(S.contests).find((x) => x.state === 'done'); return c ? `#/contest/${c.id}` : '#/contests'; }, '20 players with Riot IDs only. 80% of tickets go back as prizes, by place; ties share the prizes of the places they hold. Each player is measured against their own tier.'],
+  ['Rules, fair play, what is simulated', () => '#/rules', 'One rules page, linked from every screen. Zero tolerance on fair play; bans are on the person. Simulated here: other players, the clock, the money, Riot Sign On, identity checks and the improvement numbers. Real: thresholds from 121,585 ranked games and the 5 accounts\' games.'],
+];
+function renderGuide() {
+  const g = $('#guide');
+  document.body.classList.toggle('guide-on', S.guide.open);
+  if (!S.guide.open) { g.hidden = true; return; }
+  g.hidden = false;
+  const i = S.guide.step, [title, , text] = GUIDE[i];
+  g.innerHTML = `<div class="gh"><b>Riot reviewer guide</b><button class="x" data-guide="close" aria-label="Close the guide">×</button></div>
+  <ol class="gsteps">${GUIDE.map(([t], k) => `<li class="${k === i ? 'on' : k < i ? 'done' : ''}"><button data-guide-step="${k}">${t}</button></li>`).join('')}</ol>
+  <div class="gbody"><p class="eyebrow">Step ${i + 1} of ${GUIDE.length}</p><h3>${title}</h3><p class="small">${text}</p>
+  ${S.profile == null && i > 0 ? '<p class="small"><button class="btn small" data-guide="demo">Use the Gold demo account</button></p>' : ''}
+  <div class="row"><button class="btn ghost small" data-guide="prev" ${i === 0 ? 'disabled' : ''}>Back</button><button class="btn small" data-guide="next">${i === GUIDE.length - 1 ? 'Finish' : 'Next'}</button></div>
+  <p class="small muted">You can close the guide and look around freely at any time.</p></div>`;
+}
+function guideGo(k) {
+  S.guide.step = k; save();
+  if (S.profile == null && k > 0) { renderGuide(); return; }
+  const to = GUIDE[k][1]();
+  if (location.hash !== to) location.hash = to; else renderGuide();
 }
 
 // ---------- router ----------
 function render() {
   const h = location.hash || '#/';
   const m = h.match(/^#\/(\w+)(?:\/(.*))?/);
-  const [route, arg] = m ? [m[1], m[2]] : ['', ''];
+  const [route, arg] = m ? [m[1], m[2] || ''] : ['', ''];
   chrome(route);
   if (route === 'signin') viewSignin();
   else if (route === 'signup') viewSignup();
+  else if (route === 'link') viewLink();
   else if (route === 'home') viewHome();
-  else if (route === 'history') viewHistory();
-  else if (route === 'train') arg === 'new' ? viewPick('training', 0) : viewTrain();
-  else if (route === 'milestones') viewMilestones();
-  else if (route === 'contests') viewContests();
-  else if (route === 'join') (arg ? viewPick('contest', Number(arg) || 0) : (location.hash = '#/contests'));
-  else if (route === 'verify') viewVerify();
+  else if (route === 'intel') viewIntel(arg);
+  else if (route === 'train') viewTrain(arg);
+  else if (route === 'contests') viewLobby();
+  else if (route === 'join') viewJoin(Number(arg));
+  else if (route === 'mine') viewMine(arg);
   else if (route === 'contest') viewContest(arg);
-  else if (route === 'rules') viewRules();
-  else if (route === 'data') viewData();
-  else location.hash = S.profile == null ? '#/signin' : '#/home';
+  else if (route === 'wallet') viewWallet();
+  else if (route === 'verify') viewVerify();
+  else if (route === 'account') viewAccount();
+  else if (route === 'support') viewSupport();
+  else if (route === 'rules') viewRules(arg);
+  else { location.hash = S.profile == null ? '#/signin' : '#/home'; return; }
   chrome(route);
+  renderGuide();
 }
 document.addEventListener('click', (e) => {
   const c = e.target.closest('[data-check]');
   if (c && S.profile != null) {
-    const n = runCheck({ daily: c.dataset.check === 'daily' });
-    toast(n ? `Check done: ${n} new game${n > 1 ? 's' : ''} found.` : 'Check done: no new games.');
-    render();
+    const n = runCheck({ endOfDay: c.dataset.check === 'day' });
+    toast(n ? `Check done: ${n} new game${n > 1 ? 's' : ''} found. See Training › Games.` : 'Check done: no new games.');
+    render(); return;
   }
   const u = e.target.closest('[data-unlock]');
-  if (u) { const s = S.signups.find((x) => x.id === u.dataset.unlock); if (s && s.status === 'waiting') { unlock(s); render(); } }
+  if (u) { const s = S.signups.find((x) => x.id === u.dataset.unlock); if (s && s.status === 'waiting') { unlock(s); render(); } return; }
+  if (e.target.closest('[data-signout]')) { S.profile = null; save(); location.hash = '#/signin'; return; }
+  if (e.target.closest('[data-deposit]')) { money('deposit', 1000, null); save(); toast('Demo: 10 € of play money added.'); render(); return; }
+  if (e.target.closest('[data-withdraw]')) { toast('In the real product withdrawals go to your payment provider.'); return; }
+  const gs = e.target.closest('[data-guide-step]');
+  if (gs) { guideGo(Number(gs.dataset.guideStep)); return; }
+  const gb = e.target.closest('[data-guide]');
+  if (gb) {
+    const a = gb.dataset.guide;
+    if (a === 'open') { S.guide.open = true; save(); guideGo(S.guide.step); renderGuide(); }
+    else if (a === 'close') { S.guide.open = false; save(); renderGuide(); }
+    else if (a === 'prev') guideGo(Math.max(0, S.guide.step - 1));
+    else if (a === 'next') { if (S.guide.step === GUIDE.length - 1) { S.guide = { open: false, step: 0 }; save(); renderGuide(); } else guideGo(S.guide.step + 1); }
+    else if (a === 'demo') { signIn(0); setTimeout(() => guideGo(S.guide.step), 0); }
+  }
+  const me = $('details.me[open]');
+  if (me && !e.target.closest('details.me')) me.open = false;
 });
 addEventListener('hashchange', () => { render(); scrollTo(0, 0); });
 load();
