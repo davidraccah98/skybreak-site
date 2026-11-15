@@ -474,7 +474,7 @@ function chrome(route) {
   const link = ([href, name, key]) => `<a href="${href}" class="${navActive(key, href) ? 'on' : ''}">${key ? icon(key) : ''}<span>${name}</span></a>`;
   let html;
   if (a === 'public') {
-    html = `<a class="logo" href="#/signin"><i></i>Skybreak</a><nav class="areanav pub">${[['#/rules', 'Rules']].map(link).join('')}</nav>
+    html = `<a class="logo" href="../"><i></i>Skybreak</a><nav class="areanav pub">${[['#/rules', 'Rules']].map(link).join('')}</nav>
     <div class="right"><a class="btn small" href="#/signin">Sign in</a></div>`;
   } else {
     const nav = [['#/home', 'Home', 'home'], ['#/intel', 'Intelligence', 'intel'], ['#/train', 'Training', 'train'], ['#/contests', 'Contests', 'contests'], ['#/rules', 'Rules', 'rules']];

@@ -6,7 +6,7 @@ Instructions for any AI agent (Codex, Claude, others) working in this folder. Re
 
 The public site of Skybreak (skybreak.gg), served by GitHub Pages from the repository `davidraccah98/skybreak-site`:
 
-- `index.html`: sends skybreak.gg to the demo's entry page (`app/#/signin`).
+- `index.html`: the landing page.
 - `app/`: the demo (mockup) used for the Riot developer application. Plain HTML, CSS and JavaScript, no build step, no dependencies.
   - `app/index.html`: the shell and **all the CSS** (design tokens at the top, two area themes).
   - `app/app.js`: all the logic and the HTML of every view (template strings).

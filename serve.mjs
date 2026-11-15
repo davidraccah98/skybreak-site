@@ -1,4 +1,4 @@
-// Local preview of the site: node serve.mjs, then open http://localhost:4180 (it opens the demo's entry page).
+// Local preview of the site: node serve.mjs, then open http://localhost:4180 (landing) and http://localhost:4180/app/ (demo).
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
