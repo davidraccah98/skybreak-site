@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0f1f'/%3E%3Cpath d='M16 30V9' stroke='%23ffd27a' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M5 12h7l4-6 4 6h7' fill='none' stroke='%23e8ecff' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700;1,800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   /* ---------- tokens ---------- */
   :root {
@@ -729,6 +729,159 @@
     .route-title.hello { align-items: flex-start; }
     .player-sky { border-radius: var(--r3); background-position: 68% center; }
   }
+
+  /* ---------- refinement: game-site hierarchy (patterns from Riot's pages; no Riot fonts, logos or frames) ----------
+     Condensed italic capitals for titles, plain Inter for reading, hard edges, uppercase labels and links,
+     framed primary buttons, and shorter skies so the next action is on the first screen. */
+  :root { --r1: 2px; --r2: 2px; --r3: 3px; --f-head: "Barlow Condensed", "Arial Narrow", sans-serif; }
+  main h1 { font-size: clamp(36px, 4vw, 54px); }
+  main h1, .route-title h1, .player-id h1, .arena-hero h1, .home-cover h1, .gate-sky h1 { font-family: var(--f-head); font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: .005em; line-height: .92; }
+  .route-title h1, body[data-route="train"] main .route-title h1 { font-size: clamp(50px, 5.6vw, 78px); }
+  .player-id h1 { font-size: clamp(40px, 4.6vw, 62px); letter-spacing: .005em; }
+  .current-form h2, .panel-head h2, main h2 { font-family: var(--f-head); font-weight: 700; font-style: italic; text-transform: uppercase; letter-spacing: .01em; line-height: 1; }
+  .current-form h2, .panel-head h2 { font-size: clamp(26px, 2.6vw, 36px); }
+  main h2 { font-size: 24px; }
+  h2.h { font-size: 20px; }
+  .player-rank strong, .form-score strong, .main-pairs > div > strong, .training-signal strong, .contest-status strong, .counter b, .arena-wallet > strong, .arena-ticket strong, .impgrid b { font-family: var(--f-head); font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+  .player-rank strong { text-transform: uppercase; font-style: italic; font-weight: 800; }
+
+  /* Links that lead on, like "View all": small capitals and an arrow. */
+  .panel-head a, a.more, .home-contests .panel-head a { text-transform: uppercase; letter-spacing: .1em; font-size: 12px; font-weight: 700; white-space: nowrap; }
+
+  /* Buttons: hard edges, capitals, and a thin frame around the primary one. */
+  .btn { border-radius: var(--r1); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; padding: 11px 18px; outline: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 3px; }
+  .btn:hover { outline-color: var(--accent); }
+  .btn.ghost, .btn.small, .demo-bar button, #guide .btn { outline: 0; }
+  .btn.small { padding: 7px 12px; font-size: 11px; }
+  .btn:focus-visible { outline: 2px solid var(--accent-hot); outline-offset: 3px; }
+
+  /* Navigation and tabs read like a game client: capitals, spaced, a bar on the active one. */
+  .tabs a { text-transform: uppercase; letter-spacing: .1em; font-size: 12px; font-weight: 700; }
+  @media (min-width: 900px) {
+    body:not([data-area="public"]) .areanav:not(.pub) a { text-transform: uppercase; letter-spacing: .1em; font-size: 12.5px; font-weight: 700; border-radius: var(--r1); }
+    body:not([data-area="public"]) .areanav:not(.pub) a:hover { transform: none; background: color-mix(in srgb, var(--accent) 6%, transparent); }
+    body:not([data-area="public"]) .areanav:not(.pub) a.on { border-color: transparent; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 85%); box-shadow: inset 3px 0 0 var(--accent); }
+  }
+
+  /* Shorter skies: the image frames the page, the first screen shows what to do next. */
+  .player-sky { min-height: clamp(260px, 24vw, 330px); padding: clamp(24px, 3.6vw, 44px); }
+  .player-avatar { width: 78px; height: 78px; padding: 0; overflow: hidden; border-color: color-mix(in srgb, var(--accent-hot) 60%, transparent); }
+  .player-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  body[data-route="intel"] main, body[data-route="train"] main, body[data-area="contest"] main { padding-top: clamp(170px, 16vw, 220px); }
+  body[data-route="intel"] main::before, body[data-route="train"] main::before, body[data-area="contest"] main::before { height: clamp(300px, 27vw, 370px); }
+  /* A short page must still be as tall as its sky, or the sky covers the footer. */
+  body[data-route="intel"] main, body[data-route="train"] main, body[data-area="contest"] main { min-height: calc(clamp(300px, 27vw, 370px) + 80px); }
+  .route-title { min-height: 0; }
+
+  /* The contest area stays gold, but quieter: white titles, a dimmer storm, the board before the money. */
+  .contest-title h1 { color: var(--ink); }
+  body[data-area="contest"] main::before { filter: saturate(.75) brightness(.85); }
+
+  /* ---------- Intelligence and Home: the whole ranked history, mains, everyone's numbers ---------- */
+  .up { color: var(--good); } .down { color: var(--bad); }
+  .intel-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; margin: var(--s4) 0 var(--s6); background: var(--line); border: 1px solid var(--line); }
+  .intel-kpis > div { display: grid; gap: 2px; padding: 14px 16px; background: color-mix(in srgb, var(--panel) 92%, transparent); }
+  .intel-kpis span { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .intel-kpis strong { font: 700 32px/1.05 var(--f-head); font-variant-numeric: tabular-nums; }
+  .intel-kpis small { color: var(--muted); font-size: 12px; }
+  .intel-block { margin: var(--s7) 0 0; }
+  .intel-block > .panel-head { margin-bottom: var(--s4); }
+  .main-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+  .mcard { display: grid; grid-template-columns: 40px 1fr 1fr; gap: 10px 12px; align-items: center; padding: 14px; text-align: left; color: var(--ink); text-decoration: none; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: var(--r2); }
+  .mcard:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+  .mcard.on { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .mcard .champ { width: 40px; height: 40px; }
+  .mcard .mname { grid-column: 2 / -1; display: grid; } .mname small { color: var(--muted); font-size: 12px; }
+  .mstat { display: grid; gap: 1px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .mcard .mstat:nth-of-type(2) { grid-column: 1 / 3; } .mcard .mstat:nth-of-type(3) { grid-column: 3 / 4; }
+  .mstat small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .mstat b { font: 700 24px/1.1 var(--f-head); font-variant-numeric: tabular-nums; } .mstat b.sm { font-size: 17px; }
+  .mstat em { font-style: normal; font-size: 12px; font-weight: 700; }
+  .main-detail { margin-top: var(--s4); padding: clamp(16px, 2.6vw, 26px); background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--line); border-radius: var(--r3); }
+  .md-head { display: flex; align-items: center; gap: 14px; margin-bottom: var(--s4); }
+  .md-head h3 { margin: 0; font: italic 700 26px/1.05 var(--f-head); text-transform: uppercase; }
+  .md-head .eyebrow { margin-bottom: 4px; }
+  .main-detail h4 { margin: 0 0 10px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .md-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s5); margin-bottom: var(--s5); }
+  @media (min-width: 1100px) { .md-grid { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); } }
+  table.vs em { font-style: normal; font-size: 10px; }
+  .trend { width: 100%; max-width: 420px; height: auto; display: block; }
+  .trend polyline { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .trend circle { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
+  .trend .mid { stroke: var(--line2); stroke-dasharray: 3 3; }
+  .trend text { fill: var(--muted); font-size: 9px; }
+  td.gchamp { display: flex; align-items: center; gap: 10px; min-width: 170px; }
+  td.gchamp .champ { width: 30px; height: 30px; }
+  td.gchamp span { display: grid; } td.gchamp small { color: var(--muted); font-size: 12px; }
+  table.games td, table.stats td { vertical-align: middle; }
+  table.stats th button.sort { all: unset; cursor: pointer; text-transform: uppercase; letter-spacing: .06em; }
+  table.stats th button.sort.on { color: var(--ink); }
+  table.stats tr.srow { cursor: pointer; }
+  table.stats tr.srow:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  table.stats tr.yours td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  table.stats tr.yours td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  table.stats tr.open td { border-bottom-color: transparent; }
+  tr.sdetail > td { background: color-mix(in srgb, var(--panel2) 80%, transparent); padding: 16px; }
+  .cdetail { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .cdetail h4 { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .bars { display: flex; align-items: flex-end; gap: 6px; min-height: 120px; }
+  .bars > div { display: grid; justify-items: center; gap: 3px; min-width: 34px; }
+  .bars i { display: block; width: 18px; background: var(--accent); border-radius: 2px 2px 0 0; }
+  .bars b { font-size: 12px; font-variant-numeric: tabular-nums; } .bars small { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+  .improve { margin: var(--s5) 0; padding: 24px 0; border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); }
+  .improve-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+  @media (min-width: 1000px) { .improve-grid { grid-template-columns: minmax(260px, .8fr) minmax(0, 2fr); } }
+  .improve-big { display: grid; align-content: start; gap: 4px; padding: 18px 20px; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-left: 3px solid var(--line2); }
+  .improve-big.up { border-left-color: var(--good); } .improve-big.down { border-left-color: var(--bad); }
+  .improve-big strong { font: italic 800 64px/1 var(--f-head); font-variant-numeric: tabular-nums; }
+  .improve-big.up strong { color: var(--good); } .improve-big.down strong { color: var(--bad); }
+  .improve-big > span { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+  .improve-big p { margin: 8px 0 0; }
+  .home-mains { align-content: start; }
+  .home-insights.solo { grid-template-columns: minmax(0, 1fr); }
+  #champ-stats .filters label.grow { flex: 1 1 200px; min-width: 0; }
+  #champ-stats .filters input[type=text] { width: 100%; }
+  @media (max-width: 640px) {
+    .improve > .panel-head, .intel-block > .panel-head { flex-wrap: wrap; align-items: flex-start; }
+    .improve > .panel-head > div { flex: 1 1 100%; }
+    .improve-big strong { font-size: 54px; }
+  }
+
+  @media (max-width: 899px) {
+    body[data-route="intel"] main, body[data-route="train"] main, body[data-area="contest"] main { padding-top: 150px; min-height: 330px; }
+    /* main already spans the screen here: the earlier -14px offsets made every page 28px wider than the phone. */
+    body[data-route="intel"] main::before, body[data-route="train"] main::before, body[data-area="contest"] main::before { height: 250px; left: 0; right: 0; }
+    .route-title h1 { font-size: clamp(46px, 14vw, 60px); }
+  }
+  @media (max-width: 760px) {
+    .player-sky { min-height: 0; padding: 26px 20px 28px; gap: 22px; }
+    .player-avatar { width: 56px; height: 56px; }
+    .player-id h1 { font-size: 34px; }
+    .player-rank { margin-left: 0; padding: 12px 0 0 16px; }
+    .player-rank strong { font-size: 34px; }
+  }
+  /* ---------- entry page for Riot's review: a note, the areas with their screens, how we treat the data ---------- */
+  .entry { max-width: 1120px; margin: 0 auto; }
+  .entry-head { padding: clamp(18px, 4vw, 40px) 0 var(--s5); max-width: 760px; }
+  .entry-head h1 { font-size: clamp(40px, 5.4vw, 68px); }
+  .entry-note { font-size: 17px; line-height: 1.6; color: var(--ink); margin: var(--s4) 0 var(--s5); padding-left: 16px; border-left: 2px solid var(--dawn); }
+  .entry h2 { margin-top: var(--s7); }
+  .areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .area { display: flex; flex-direction: column; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: var(--r2); overflow: hidden; }
+  .area:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  .area .shot { display: block; padding: 0; border: 0; border-bottom: 1px solid var(--line); background: var(--bg2); aspect-ratio: 670 / 470; overflow: hidden; }
+  .area .shot img { width: 100%; height: 100%; object-fit: cover; object-position: right bottom; display: block; transition: transform .3s ease; }
+  .area:hover .shot img { transform: scale(1.02); }
+  .area-text { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; flex: 1; }
+  .area-text h3 { margin: 0; font: 800 italic 26px/1 var(--f-head); text-transform: uppercase; letter-spacing: .01em; }
+  .area-text p { margin: 0; color: var(--soft); }
+  .area .back { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 12px; color: var(--soft); font-variant-numeric: tabular-nums; }
+  .area .back b { color: var(--gold-hot); font-weight: 700; }
+  .area .more { align-self: flex-start; margin-top: auto; padding: 8px 0 0; border: 0; background: none; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; font-size: 12px; font-weight: 700; }
+  .entry-data ul { margin: 0 0 var(--s3); padding-left: 18px; display: grid; gap: 8px; color: var(--soft); }
+  .entry-data ul b { color: var(--ink); }
+  table.prizes tr.top td:nth-child(2) b { color: var(--gold-hot); }
+  table.prizes tr.none td { color: var(--muted); }
 </style>
 </head>
 <body data-area="public">
@@ -742,6 +895,7 @@
   </footer>
   <script src="data.js"></script>
   <script src="profiles.js"></script>
+  <script src="history.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

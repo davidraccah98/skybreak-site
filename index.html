@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0f1f'/%3E%3Cpath d='M16 30V9' stroke='%23ffd27a' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M5 12h7l4-6 4 6h7' fill='none' stroke='%23e8ecff' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700;1,800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     --sky-top: #040713; --sky-mid: #07101f; --sky-low: #0c1830;
@@ -104,7 +104,7 @@
   .steps li::before { content: counter(s); display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 210, 122, .5); color: var(--beam); font-weight: 800; }
   .steps strong { display: block; color: var(--ink); font-size: 18px; margin-bottom: 2px; }
 
-  /* lock-in mock (real thresholds of Ahri Mid, catalog of 12 Nov 2026) */
+  /* lock-in mock (real thresholds of Ahri Mid, catalog of 15 Nov 2026) */
   .mock { border: 1px solid rgba(255, 210, 122, .35); border-radius: 18px; background: var(--panel); padding: 20px; box-shadow: 0 30px 80px -30px rgba(255, 210, 122, .25), 0 0 0 1px rgba(0, 0, 0, .4); }
   .mock-head { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
   .mock-head img { width: 48px; height: 48px; border-radius: 10px; background: var(--panel2); }
@@ -223,6 +223,41 @@
     .brand { font-size: clamp(42px, 13vw, 58px); letter-spacing: .035em; }
     section { padding: 64px 0; }
   }
+  /* ---------- the demo's look (app/index.html): condensed italic capitals, hard edges, the same skies ---------- */
+  :root { --r1: 2px; --r2: 2px; --r3: 3px; --f-head: "Barlow Condensed", "Arial Narrow", sans-serif; }
+  .brand, h2, h3, .tagline, .quote { font-family: var(--f-head); font-style: italic; text-transform: uppercase; }
+  .brand { font-weight: 800; letter-spacing: .01em; line-height: .88; font-size: clamp(64px, 11vw, 128px); text-shadow: 0 6px 36px rgba(0,0,0,.55); }
+  .tagline { font-weight: 700; color: var(--dawn); letter-spacing: .02em; text-shadow: 0 3px 20px rgba(0,0,0,.6); }
+  h2 { font-weight: 800; letter-spacing: .005em; line-height: .95; font-size: clamp(34px, 5vw, 54px); }
+  h3 { font-weight: 700; letter-spacing: .01em; font-size: 28px; line-height: 1; }
+  .lead { color: rgba(244,248,255,.88); text-shadow: 0 2px 16px rgba(0,0,0,.6); }
+  .proof { color: rgba(244,248,255,.7); } .proof b { color: var(--ink); }
+  .btn { border-radius: var(--r1); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; padding: 12px 20px; outline: 1px solid rgba(92,200,255,.45); outline-offset: 3px; }
+  .btn:hover { outline-color: var(--beam); }
+  .btn.ghost, .btn.sm { outline: 0; }
+  .btn.sm { padding: 8px 13px; font-size: 11px; }
+  .btn:focus-visible { outline: 2px solid var(--beam-hot); outline-offset: 3px; }
+  .top nav a { text-transform: uppercase; letter-spacing: .1em; font-size: 12px; font-weight: 700; }
+  /* The hero is the Home sky of the demo. */
+  .hero { background-image: linear-gradient(90deg, rgba(2,8,21,.95) 0%, rgba(2,8,21,.78) 40%, rgba(2,8,21,.18) 72%, rgba(2,8,21,.44) 100%), linear-gradient(0deg, var(--sky-top), transparent 42%), url("app/assets/home-dawn.webp"); background-size: cover; background-position: center center; }
+  .hero::after, .stars, .beam, .ceiling { display: none; }
+  .badge { border-left-color: var(--dawn); color: var(--ink); }
+  /* The two products wear their own world: the free side at sunset, the contests at night in gold. */
+  .product { background: linear-gradient(180deg, rgba(4,7,19,.55), rgba(4,7,19,.96) 62%), url("app/assets/intelligence-sunset.webp") center 30% / cover no-repeat; }
+  .product.gold { background: linear-gradient(180deg, rgba(3,4,5,.5), rgba(3,4,5,.97) 62%), url("app/assets/contests-night.webp") center 35% / cover no-repeat; }
+  .product h3 { margin-top: 70px; }
+  .product.gold h3 { color: var(--gold); }
+  .product.gold .tag { color: var(--gold); border-color: rgba(228,182,93,.5); }
+  .product.gold .ticks li::before { background: var(--gold); }
+  .product .tag, .lock, .lv { text-transform: uppercase; letter-spacing: .1em; border-radius: var(--r1); }
+  .mock-head b, .pickrow h4 { font-family: var(--f-head); font-style: italic; text-transform: uppercase; font-size: 20px; letter-spacing: .01em; }
+  .pickrow h4 { font-size: 18px; }
+  .mock-foot b { font-family: var(--f-head); font-size: 26px; }
+  @media (max-width: 720px) {
+    .hero { min-height: 640px; background-position: 64% center; background-image: linear-gradient(0deg, rgba(2,8,21,.96) 18%, rgba(2,8,21,.55) 60%, rgba(2,8,21,.3) 100%), url("app/assets/home-dawn.webp"); }
+    .brand { font-size: clamp(54px, 17vw, 76px); }
+    .product h3 { margin-top: 48px; }
+  }
 </style>
 </head>
 <body>
@@ -242,7 +277,7 @@
       <p class="tagline">Break your ceiling.</p>
       <p class="lead">For solo queue players who want to get better and compete, but can't commit to a team, a coach or hours of VOD review because they work or study.</p>
       <div class="ctas"><a class="btn" href="app/#/signup">Create account</a><a class="btn ghost" href="app/#/signin">Sign in</a></div>
-      <p class="proof">The demo uses real games. Thresholds measured on <b>121,585</b> ranked games · <b>283</b> champion and role pairs · <b>2,292</b> players</p>
+      <p class="proof">The demo uses real games. Thresholds measured on <b>140,215</b> ranked games · <b>285</b> champions and roles · <b>2,294</b> players</p>
     </div>
   </div>
 
@@ -255,7 +290,7 @@
         <article class="product">
           <span class="tag">Personal · free</span>
           <h3>Learn where you beat your tier</h3>
-          <p>Sign up a game with a champion and role. After it, every challenge of that pair is judged against the average player of your own tier.</p>
+          <p>Sign up a game with a champion and role. After it, every challenge of that champion and role is judged against the average player of your own tier.</p>
           <ul class="ticks">
             <li>Intelligence: your strengths and weaknesses per champion, and everyone's thresholds</li>
             <li>Training with free improvement contests of 20 players</li>
@@ -269,7 +304,7 @@
           <ul class="ticks">
             <li>20 players per contest, from any tier</li>
             <li>Everyone is measured against their own tier: Bronze and Challenger on equal terms</li>
-            <li>Tickets of 2, 5 or 10 €; 80% of the tickets go back as prizes</li>
+            <li>Tickets of 2, 5 or 10 €: the top 4 win up to twice their ticket, places 5 to 12 get it back</li>
           </ul>
         </article>
       </div>
@@ -294,8 +329,8 @@
             <span class="lock">Locked</span>
           </div>
           <div class="pickrow"><h4>Golden</h4><span class="lv easy">easy · 10</span><p>Earn at least <b>19%</b> of your whole team's gold.</p></div>
-          <div class="pickrow"><h4>Hunter</h4><span class="lv medium">medium · 20</span><p>Land the final blow on at least <b>26%</b> of your team's kills.</p></div>
-          <div class="pickrow"><h4>Visionary</h4><span class="lv hard">hard · 30</span><p>Win the vision war against your lane opponent by at least <b>+41%</b>.</p></div>
+          <div class="pickrow"><h4>Hunter</h4><span class="lv medium">medium · 20</span><p>Land the final blow on at least <b>25%</b> of your team's kills.</p></div>
+          <div class="pickrow"><h4>Visionary</h4><span class="lv hard">hard · 30</span><p>Win the vision war against your lane opponent by at least <b>+40%</b>.</p></div>
           <figcaption class="mock-foot"><span>Real thresholds for Ahri Mid</span><span>up to <b>60</b> points</span></figcaption>
         </figure>
       </div>

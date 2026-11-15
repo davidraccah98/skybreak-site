@@ -10,7 +10,7 @@ The public site of Skybreak (skybreak.gg), served by GitHub Pages from the repos
 - `app/`: the demo (mockup) used for the Riot developer application. Plain HTML, CSS and JavaScript, no build step, no dependencies.
   - `app/index.html`: the shell and **all the CSS** (design tokens at the top, two area themes).
   - `app/app.js`: all the logic and the HTML of every view (template strings).
-  - `app/data.js`, `app/profiles.js`: real data. **Never edit them.**
+  - `app/data.js`, `app/profiles.js`, `app/history.js`, `app/champions.js`: real data. **Never edit them.**
 - `docs/APP.md`: the product plan (in Italian): areas, every page with a wireframe, accounts, rules, look. The design must follow it.
 - `README.md`: what is real and simulated, the routes, and the rules the design must respect.
 

@@ -3,7 +3,7 @@
 Skybreak is a product for League of Legends solo queue players (EUW). Every game a player signs up is judged against the average player of the same tier, champion and role, on a catalog of 14 challenges with real thresholds. Two areas of equal weight, on the same challenges:
 
 - **Personal area (free, base account):** Intelligence (you against your tier; everyone's thresholds), Training (sign up a champion and role; the game is judged on every challenge of the pair and enters a free improvement contest of 20), milestones.
-- **Contest area (prizes, verified account):** lock a champion, a role and 3 challenges; the first game with that pair enters a contest of 20 players; 2, 5 or 10 € tickets, 80% back as prizes.
+- **Contest area (prizes, verified account):** lock a champion, a role and 3 challenges; the first game with that pair enters a contest of 20 players; 2, 5 or 10 € tickets, prizes by place (the top 4 up to twice the ticket, places 5 to 12 the ticket back). The wallet lives in the contest lobby.
 
 The product plan this mockup is built on is `docs/APP.md` (in Italian): areas, every page with a wireframe, accounts, rules, look, reviewer guide. This is the mockup for the Riot developer application, live at http://skybreak.gg (landing) and http://skybreak.gg/app/ (demo) once published.
 
@@ -25,8 +25,10 @@ or open `index.html` directly in a browser. Champion icons load from Riot's Data
 | `index.html` | The landing page. |
 | `app/index.html` | The demo shell and all its CSS (design tokens, two area themes). |
 | `app/app.js` | All the demo logic: hash router, views, scoring, checks, contests, the reviewer guide. |
-| `app/data.js` | `window.SKY`: the real challenge catalog (14 challenges, thresholds for 283 champion-role pairs, levels, texts, facts). |
-| `app/profiles.js` | `window.PROFILES`: 5 real EUW players (Gold, Platinum, Emerald, Diamond, Master) with their real ranked games and challenge values, under invented names. `window.ADJUST`: the per-tier correction of each threshold. |
+| `app/data.js` | `window.SKY`: the real challenge catalog (14 challenges, thresholds for 285 champions and roles, levels, texts, facts). |
+| `app/profiles.js` | `window.PROFILES`: first the founder's own account (Er Zebbor#EUW, Emerald, 81 real ranked games), the demo account; then 5 real EUW players (Gold, Platinum, Emerald, Diamond, Master) with their real ranked games and challenge values, under invented names. `window.ADJUST`: the per-tier correction of each threshold. |
+| `app/history.js` | `window.HISTORY`: every ranked solo game Riot keeps for the founder's account (654 games since July 2025), with KDA, farm, gold, damage, vision, lane opponent and the value of each challenge. Read by Intelligence and by the improvement on Home. |
+| `app/champions.js` | `window.CHAMPSTATS`: everyone's numbers per champion, role and tier (win rate, popularity, KDA, damage, gold, CS, vision, length, typical challenge values), from the lab's ranked games on EUW. Loaded only when Intelligence opens. |
 
 ## Routes of the demo
 
