@@ -22,7 +22,7 @@ or open `index.html` directly in a browser. Champion icons load from Riot's Data
 | File | What it is |
 |---|---|
 | `docs/APP.md` | The product plan (Italian): what every page shows and why. |
-| `index.html` | The landing page. |
+| `index.html` | Sends skybreak.gg to the demo's entry page (`app/#/signin`). |
 | `app/index.html` | The demo shell and all its CSS (design tokens, two area themes). |
 | `app/app.js` | All the demo logic: hash router, views, scoring, checks, contests, the reviewer guide. |
 | `app/data.js` | `window.SKY`: the real challenge catalog (14 challenges, thresholds for 285 champions and roles, levels, texts, facts). |
