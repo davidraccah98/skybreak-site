@@ -68,7 +68,7 @@
   /* ---------- demo bar and header ---------- */
   .demo-bar { background: #0b0c10; color: var(--soft); font-size: 12px; padding: 5px 16px; border-bottom: 1px solid var(--contest-line); display: flex; gap: var(--s3); justify-content: center; align-items: center; flex-wrap: wrap; text-align: center; }
   .demo-bar b { color: var(--gold-hot); }
-  .demo-bar button { background: transparent; color: var(--gold-hot); border: 1px solid var(--contest-line2); border-radius: var(--r1); padding: 3px 9px; font-weight: 700; font-size: 11px; }
+  .demo-bar a { text-decoration: none; background: transparent; color: var(--gold-hot); border: 1px solid var(--contest-line2); border-radius: var(--r1); padding: 3px 9px; font-weight: 700; font-size: 11px; }
   header.top { position: sticky; top: 0; z-index: 10; background: rgba(4,7,19,.94); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
   body[data-area="contest"] header.top { background: rgba(3,4,5,.95); border-bottom-color: var(--contest-line); }
   .top-in { max-width: 1200px; min-height: 58px; margin: 0 auto; padding: 8px 20px; display: flex; align-items: center; gap: var(--s5); }
@@ -589,21 +589,6 @@
     .contest-status > * { border-bottom: 1px solid var(--contest-line); }
   }
 
-  /* ---------- reviewer guide ---------- */
-  #guide { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 30; background: #0b1124; border-left: 1px solid rgba(255,210,122,.4); box-shadow: -20px 0 50px rgba(0,0,0,.5); display: flex; flex-direction: column; overflow-y: auto; }
-  #guide[hidden] { display: none; }
-  #guide .gh { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); color: var(--gold); position: sticky; top: 0; background: #0b1124; }
-  #guide .gsteps { list-style: none; margin: 0; padding: 10px 10px 0; display: grid; gap: 2px; counter-reset: g; }
-  #guide .gsteps li { counter-increment: g; }
-  #guide .gsteps button { width: 100%; text-align: left; background: none; border: 0; color: var(--soft); padding: 7px 8px; border-radius: var(--r1); font-size: 13px; display: flex; gap: 8px; }
-  #guide .gsteps button::before { content: counter(g); display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--panel3); font-size: 11px; font-weight: 700; flex: none; }
-  #guide .gsteps li.on button { background: var(--panel2); color: var(--ink); }
-  #guide .gsteps li.on button::before { background: var(--gold); color: #1b1300; }
-  #guide .gsteps li.done button::before { content: "✓"; color: var(--good); }
-  #guide .gbody { padding: 16px; border-top: 1px solid var(--line); margin-top: 10px; }
-  #guide .eyebrow { color: var(--gold); }
-  #guide .btn { --accent: var(--gold); --accent-hot: var(--gold-hot); --on-accent: #1b1300; }
-  @media (min-width: 1200px) { body.guide-on main, body.guide-on .top-in, body.guide-on footer { margin-right: 356px; } }
   @media (max-width: 760px) {
     body { font-size: 16px; }
     main { padding: var(--s5) 14px 96px; }
@@ -613,7 +598,6 @@
     .home3 { gap: 10px; }
     .card { padding: 15px; }
     .contest-head.is-finished { padding: var(--s5) var(--s4); }
-    #guide { top: auto; left: 0; width: auto; max-height: 62vh; border-left: 0; border-top: 1px solid var(--contest-line2); border-radius: var(--r3) var(--r3) 0 0; }
   }
   footer { max-width: 1120px; margin: 0 auto; padding: 24px 16px 40px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
   @media (max-width: 760px) { body:not([data-area="public"]) footer { padding-bottom: 96px; } }
@@ -647,7 +631,6 @@
     body:not([data-area="public"]) main { width: auto; max-width: 1472px; margin: 0 auto 0 236px; padding: 38px clamp(24px, 4vw, 58px) var(--s8); }
     body:not([data-area="public"])[data-route="home"] main { max-width: 1536px; }
     body:not([data-area="public"]) footer { max-width: none; margin: 0 0 0 236px; padding-inline: clamp(24px, 4vw, 58px); }
-    body.guide-on:not([data-area="public"]) main, body.guide-on:not([data-area="public"]) footer { margin-right: 356px; }
   }
 
   @media (max-width: 899px) {
@@ -751,7 +734,7 @@
   /* Buttons: hard edges, capitals, and a thin frame around the primary one. */
   .btn { border-radius: var(--r1); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; padding: 11px 18px; outline: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 3px; }
   .btn:hover { outline-color: var(--accent); }
-  .btn.ghost, .btn.small, .demo-bar button, #guide .btn { outline: 0; }
+  .btn.ghost, .btn.small, .demo-bar a { outline: 0; }
   .btn.small { padding: 7px 12px; font-size: 11px; }
   .btn:focus-visible { outline: 2px solid var(--accent-hot); outline-offset: 3px; }
 
@@ -885,10 +868,9 @@
 </style>
 </head>
 <body data-area="public">
-  <div class="demo-bar"><span><b>Demo</b> · Er Zebbor data and Skybreak thresholds are real (<span id="games-n"></span> games) · players, time and money are simulated.</span><button type="button" data-guide="open">Riot reviewer guide</button></div>
+  <div class="demo-bar"><span><b>Demo</b> · Er Zebbor data and Skybreak thresholds are real (<span id="games-n"></span> games) · players, time and money are simulated.</span><a href="#/signin">Overview for Riot</a></div>
   <header class="top" id="top"></header>
   <main id="app"></main>
-  <aside id="guide" hidden aria-label="Riot reviewer guide"></aside>
   <footer>
     <p>Skybreak isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
     <p><a href="../">skybreak.gg</a> · <a href="#/rules">Rules</a> · <a href="#/support">Support</a> · <a href="mailto:david@skybreak.gg">david@skybreak.gg</a></p>

@@ -34,14 +34,14 @@ const DEMO_RIOT_ID = 'Er Zebbor#EUW';
 const KEY = 'skybreak-demo-v5'; // v5: games judged on the catalog of 15 Nov (a new catalog makes saved games stale)
 let S;
 function fresh(keep = {}) {
-  return { profile: null, signupForm: null, verified: false, balance: 0, now: Date.now(), lastCheck: Date.now(), cursor: 0, signups: [], games: [], contests: {}, imp: {}, milestones: [], ledger: [], seq: 1, area: 'personal', guide: { open: false, step: 0 }, ...keep };
+  return { profile: null, signupForm: null, verified: false, balance: 0, now: Date.now(), lastCheck: Date.now(), cursor: 0, signups: [], games: [], contests: {}, imp: {}, milestones: [], ledger: [], seq: 1, area: 'personal', ...keep };
 }
 function load() {
   try { S = JSON.parse(localStorage.getItem(KEY)) || fresh(); } catch { S = fresh(); }
-  if (!S.imp || !S.guide) S = fresh();
+  if (!S.imp) S = fresh();
   // Older demo sessions could point to one of the anonymous comparison profiles.
   // The reviewer experience now exposes only the real Er Zebbor dataset.
-  if (S.profile != null && S.profile !== DEMO_PROFILE) S = fresh({ guide: S.guide });
+  if (S.profile != null && S.profile !== DEMO_PROFILE) S = fresh();
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* private mode: works until reload */ } }
 const uid = (p) => `${p}${S.seq++}`;
@@ -313,7 +313,7 @@ function enter(kind, ticket, at) {
 
 // ---------- signing in: the account's history and a few past contests ----------
 function signIn(i) {
-  S = fresh({ signupForm: S.signupForm, guide: S.guide });
+  S = fresh({ signupForm: S.signupForm });
   S.profile = i;
   const all = PROFILES[i].games;
   const past = Math.floor(all.length * PAST_SHARE);
@@ -551,30 +551,29 @@ function newDraft(kind, ticket) {
 
 // ---------- public: sign in, create account, link Riot ----------
 const AREAS = [
-  [0, 'Home', 'area-home.jpg', 'How much you improved lately, your mains, and your training match history.'],
-  [1, 'Intelligence', 'area-intel.jpg', 'All your ranked solo games, your mains against your tier, and every champion\'s numbers by role and tier.'],
-  [2, 'Training', 'area-train.jpg', 'Sign up a champion and role, play, and the game is judged on every challenge against your tier. Free improvement contests.'],
-  [3, 'Contests', 'area-contests.jpg', 'Prize contests on your own ranked games: 20 players, each measured against the average player of their tier on that champion and role. We don\'t create custom games, so we don\'t use the Tournament API.'],
-  [5, 'Rules', 'area-rules.jpg', 'One page, linked from every screen: accounts, scoring, sign-ups, prizes, fair play and how we treat the data.'],
+  ['#/home', 'Home', 'area-home.jpg', 'How much you improved lately, your mains, and your training match history.'],
+  ['#/intel', 'Intelligence', 'area-intel.jpg', 'All your ranked solo games, your mains against your tier, and every champion\'s numbers by role and tier.'],
+  ['#/train', 'Training', 'area-train.jpg', 'Sign up a champion and role, play, and the game is judged on every challenge against your tier. Free improvement contests.'],
+  ['#/contests', 'Contests', 'area-contests.jpg', 'Prize contests on your own ranked games: 20 players, each measured against the average player of their tier on that champion and role. We don\'t create custom games, so we don\'t use the Tournament API.'],
+  ['#/rules', 'Rules', 'area-rules.jpg', 'One page, linked from every screen: accounts, scoring, sign-ups, prizes, fair play and how we treat the data.'],
 ];
-/** Enter the demo as Er Zebbor with the guide open at step k (keeps the demo state if already in). */
-function enterDemo(k) {
-  S.guide = { open: true, step: k };
+/** Enter the demo as Er Zebbor on one screen (keeps the demo state if already in). */
+function enterDemo(to) {
   if (S.profile == null) signIn(DEMO_PROFILE);
-  guideGo(k);
+  location.hash = to;
 }
 function viewSignin() {
   const back = PRIZE_ROWS.filter(([, x]) => x).map(([n, x]) => `<span><b>${n}</b> ${x === 1 ? 'ticket back' : `×${x}`}</span>`).join('');
   app.innerHTML = `<div class="entry"><div class="entry-head"><p class="eyebrow">Skybreak demo</p><h1>Built with respect for the game</h1>
   <p class="entry-note">I've played League since I was 15, and Skybreak is built out of respect for that game. We followed Riot's developer policies from the first design; if anything here doesn't fit, tell us and we'll change it. <span class="muted">— the founder</span></p>
-  <div class="row"><button class="btn" data-enter="0">${S.profile == null ? 'Start as Er Zebbor' : 'Continue as Er Zebbor'}</button><span class="small muted">Er Zebbor's EUW games and the thresholds are real; other players, time and money are simulated.</span></div></div>
+  <div class="row"><button class="btn" data-enter="#/home">${S.profile == null ? 'Start as Er Zebbor' : 'Continue as Er Zebbor'}</button><span class="small muted">Er Zebbor's EUW games and the thresholds are real; other players, time and money are simulated.</span></div></div>
   <h2>The areas</h2><div class="areas">${AREAS.map(([k, name, img, text]) => `<article class="area"><button class="shot" data-enter="${k}" aria-label="Open ${name}"><img src="assets/${img}" alt="${name} screen" loading="lazy"></button>
-  <div class="area-text"><h3>${name}</h3><p class="small">${text}</p>${k === 3 ? `<div class="back">${back}</div>` : ''}<button class="more" data-enter="${k}">Open ${name} ›</button></div></article>`).join('')}</div>
+  <div class="area-text"><h3>${name}</h3><p class="small">${text}</p>${k === '#/contests' ? `<div class="back">${back}</div>` : ''}<button class="more" data-enter="${k}">Open ${name} ›</button></div></article>`).join('')}</div>
   <h2>How we treat the data</h2><div class="card entry-data">${dataList()}
   <p class="small"><b>What we read from Riot:</b> after Riot Sign On, the Riot ID, region, rank tier and ranked solo games, through the official API. Never the password, nothing during the game.</p>
   <p class="small muted">${dataProof()} <a href="#/rules/method">In the rules ›</a></p></div>
   <p class="small muted">Questions: <a href="mailto:david@skybreak.gg">david@skybreak.gg</a></p></div>`;
-  app.querySelectorAll('[data-enter]').forEach((b) => (b.onclick = () => enterDemo(Number(b.dataset.enter))));
+  app.querySelectorAll('[data-enter]').forEach((b) => (b.onclick = () => enterDemo(b.dataset.enter)));
 }
 function viewSignup() {
   const f = S.signupForm || {};
@@ -1151,7 +1150,7 @@ function viewAccount() {
     const blob = new Blob([JSON.stringify({ account: { riotId: P().name, tier: P().tier, region: 'EUW', verified: S.verified, ...S.signupForm }, balanceCents: S.balance, ledger: S.ledger, signups: S.signups, milestones: S.milestones, games: S.games }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'skybreak-my-data.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
-  const wipe = () => { S = fresh({ guide: S.guide }); save(); location.hash = '#/signin'; render(); };
+  const wipe = () => { S = fresh(); save(); location.hash = '#/signin'; render(); };
   $('#del').onclick = () => { if (confirm('Delete the demo account? In the real product you first withdraw your balance and wait for open contests to finish.')) wipe(); };
   $('#reset').onclick = () => { if (confirm('Reset the demo? Your simulated account, games and contests are deleted.')) wipe(); };
 }
@@ -1206,35 +1205,6 @@ function viewRules(sec) {
   if (sec && document.getElementById(`r-${sec}`)) requestAnimationFrame(() => document.getElementById(`r-${sec}`).scrollIntoView({ block: 'start' }));
 }
 
-// ---------- Riot reviewer guide ----------
-const GUIDE = [
-  ['Home', () => '#/home', 'How much the player improved lately, with their mains on top, and the training match history: only the games signed up for training are there.'],
-  ['Intelligence', () => '#/intel', 'All the player\'s ranked solo games, their mains against the players of their tier, and every champion\'s numbers by role and tier. No rating, and no advice on which challenges to pick in a contest.'],
-  ['Training', () => '#/train/new', 'Sign up a champion and role, play, then press Check my games. Only signed-up games are analysed: each is judged on every challenge of that champion and role, against the player\'s own tier. Free improvement contests of 20 training games reward who improves most.'],
-  ['Contests', () => '#/contests', 'Prize contests on the player\'s own ranked games. Join: a champion, a role and 3 challenges, nothing pre-filled. A verified identity is needed; the wallet is in the lobby and the ticket is taken only when the game enters a contest. We don\'t create custom games, so we don\'t use the Tournament API.'],
-  ['A finished contest', () => { const c = Object.values(S.contests).find((x) => x.state === 'done' && x.entries.some((e) => e.you)) || Object.values(S.contests).find((x) => x.state === 'done'); return c ? `#/contest/${c.id}` : '#/contests'; }, '20 players with Riot IDs only, each measured against their own tier. The top 4 win up to twice their ticket, places 5 to 12 get it back; ties share the prizes of the places they hold.'],
-  ['Rules and data', () => '#/rules/method', 'One rules page, linked from every screen, with how we treat the data. Zero tolerance on fair play; bans are on the person. Simulated here: other players, the clock, the money, Riot Sign On and identity checks.'],
-];
-function renderGuide() {
-  const g = $('#guide');
-  document.body.classList.toggle('guide-on', S.guide.open);
-  if (!S.guide.open) { g.hidden = true; return; }
-  g.hidden = false;
-  const i = S.guide.step, [title, , text] = GUIDE[i];
-  g.innerHTML = `<div class="gh"><b>Riot reviewer guide</b><button class="x" data-guide="close" aria-label="Close the guide">×</button></div>
-  <ol class="gsteps">${GUIDE.map(([t], k) => `<li class="${k === i ? 'on' : k < i ? 'done' : ''}"><button data-guide-step="${k}">${t}</button></li>`).join('')}</ol>
-  <div class="gbody"><p class="eyebrow">Step ${i + 1} of ${GUIDE.length}</p><h3>${title}</h3><p class="small">${text}</p>
-  ${S.profile == null ? '<p class="small"><button class="btn small" data-guide="demo">Enter as Er Zebbor</button></p>' : ''}
-  <div class="row"><button class="btn ghost small" data-guide="prev" ${i === 0 ? 'disabled' : ''}>Back</button><button class="btn small" data-guide="next">${i === GUIDE.length - 1 ? 'Finish' : 'Next'}</button></div>
-  <p class="small muted">You can close the guide and look around freely at any time.</p></div>`;
-}
-function guideGo(k) {
-  S.guide.step = k; save();
-  if (S.profile == null) { renderGuide(); return; }
-  const to = GUIDE[k][1]();
-  if (location.hash !== to) location.hash = to; else renderGuide();
-}
-
 // ---------- router ----------
 function render() {
   const h = location.hash || '#/';
@@ -1268,7 +1238,6 @@ function render() {
   else if (route === 'rules') viewRules(arg);
   else { location.hash = S.profile == null ? '#/signin' : '#/home'; return; }
   chrome(route);
-  renderGuide();
 }
 document.addEventListener('click', (e) => {
   const c = e.target.closest('[data-check]');
@@ -1282,17 +1251,6 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-signout]')) { S.profile = null; save(); location.hash = '#/signin'; return; }
   if (e.target.closest('[data-deposit]')) { money('deposit', 1000, null); save(); toast('Demo: 10 € of play money added.'); render(); return; }
   if (e.target.closest('[data-withdraw]')) { toast('In the real product withdrawals go to your payment provider.'); return; }
-  const gs = e.target.closest('[data-guide-step]');
-  if (gs) { guideGo(Number(gs.dataset.guideStep)); return; }
-  const gb = e.target.closest('[data-guide]');
-  if (gb) {
-    const a = gb.dataset.guide;
-    if (a === 'open') { S.guide.open = true; save(); guideGo(S.guide.step); renderGuide(); }
-    else if (a === 'close') { S.guide.open = false; save(); renderGuide(); }
-    else if (a === 'prev') guideGo(Math.max(0, S.guide.step - 1));
-    else if (a === 'next') { if (S.guide.step === GUIDE.length - 1) { S.guide = { open: false, step: 0 }; save(); renderGuide(); } else guideGo(S.guide.step + 1); }
-    else if (a === 'demo') { signIn(0); setTimeout(() => guideGo(S.guide.step), 0); }
-  }
   const me = $('details.me[open]');
   if (me && !e.target.closest('details.me')) me.open = false;
 });
