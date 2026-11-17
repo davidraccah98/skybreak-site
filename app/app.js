@@ -26,6 +26,8 @@ const RESULT_PTS = { win: 100, loss: 50 }; // decided 17 November 2026: a prize 
 const resultPts = (win) => (win ? RESULT_PTS.win : RESULT_PTS.loss);
 const prizeTotal = (win, results) => Math.round((resultPts(win) + results.reduce((a, r) => a + r.points, 0)) * 10) / 10;
 const TICKETS = [200, 500, 1000];
+const CONTEST_NAME = { 200: 'Rising', 500: 'Pro', 1000: 'Elite' }; // decided 17 November 2026: a name, never "a 2 € contest"
+const cName = (t) => `${CONTEST_NAME[t]} contest`;
 const HOUR = 3600e3;
 const DAY = 24 * HOUR;
 const START_BALANCE = 2000;
@@ -34,7 +36,7 @@ const DEMO_PROFILE = 0;
 const DEMO_RIOT_ID = 'Er Zebbor#EUW';
 
 // ---------- state ----------
-const KEY = 'skybreak-demo-v8'; // v8: training contests scored in games of progress; rewards spent from the bar
+const KEY = 'skybreak-demo-v9'; // v9: prize score is win 100 / loss 50 + challenges; contests have names
 let S;
 function fresh(keep = {}) {
   return { profile: null, signupForm: null, verified: false, balance: 0, now: Date.now(), lastCheck: Date.now(), cursor: 0, signups: [], games: [], contests: {}, imp: {}, spent: [], ledger: [], seq: 1, area: 'personal', ...keep };
@@ -45,12 +47,6 @@ function load() {
   // Older demo sessions could point to one of the anonymous comparison profiles.
   // The reviewer experience now exposes only the real Er Zebbor dataset.
   if (S.profile != null && S.profile !== DEMO_PROFILE) S = fresh();
-  if (S.profile != null && !S.winPts) {
-    for (const c of Object.values(S.contests)) if (c.state === 'open') for (const e of c.entries) e.total = prizeTotal(e.win, e.results);
-    for (const g of S.games) if (g.results && S.contests[g.contestId]?.state === 'open') g.total = prizeTotal(g.win, g.results);
-    S.winPts = true; save();
-  }
-  if (S.profile != null && !S.nowSeed) { seedOpenPrize(); save(); }
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* private mode: works until reload */ } }
 const uid = (p) => `${p}${S.seq++}`;
@@ -301,7 +297,7 @@ function settle(c, quiet) {
   const me = rows.find((e) => e.you);
   if (!me) return;
   if (me.prize) money('prize', me.prize, c.id);
-  if (!quiet) toast(c.kind === 'imp' ? `Training contest #${num(c.id)} finished: you placed ${ord(me.place)}.` : `Contest #${num(c.id)} finished: ${ord(me.place)}${me.prize ? `, ${euro2(me.prize)} credited to your wallet` : ''}.`);
+  if (!quiet) toast(c.kind === 'imp' ? `Training contest #${num(c.id)} finished: you placed ${ord(me.place)}.` : `${cName(c.ticket)} #${num(c.id)} finished: ${ord(me.place)} place.${me.prize ? ` You won ${euro2(me.prize)}.` : ''}`);
 }
 function addEntry(c, e, quiet) { c.entries.push(e); if (c.entries.length >= SEATS) settle(c, quiet); }
 function botsArrive(hours) {
@@ -323,7 +319,7 @@ function enter(kind, ticket, at) {
 // ---------- signing in: the account's history and a few past contests ----------
 function signIn(i) {
   S = fresh({ signupForm: S.signupForm });
-  S.profile = i; S.winPts = true;
+  S.profile = i;
   const all = PROFILES[i].games;
   const past = Math.floor(all.length * PAST_SHARE);
   const shift = S.now - DAY - all[past - 1].start; // real results; dates moved so the last game was yesterday
@@ -361,7 +357,7 @@ function signIn(i) {
     addEntry(c, { name: P().name, tier: P().tier, pair: cg.pair, at: cg.start, win: cg.win, results: cg.results, total: cg.total, you: true }, true);
     S.now = Date.now();
     cg.contestId = c.id;
-    cg.note = `Contest game: entered 2 € contest #${num(c.id)}.`;
+    cg.note = `Contest game: entered Rising contest #${num(c.id)}.`;
   }
   // the other contests running now
   for (const t of TICKETS) for (let k = 0; k < 2; k++) {
@@ -403,7 +399,7 @@ function seedOpenPrize() {
     money('ticket', -ticket, c.id, g.start);
     addEntry(c, { name: P().name, tier, pair: g.pair, at: g.start, win: g.win, results: g.results, total: g.total, gid: g.id, you: true }, true);
     g.impId = g.contestId; g.kind = 'contest'; g.contestId = c.id;
-    g.note = `Contest game: entered ${euro(ticket)} prize contest #${num(c.id)}, with its training contest.`;
+    g.note = `Contest game: entered ${cName(ticket)} #${num(c.id)}, with its training contest.`;
   }
 }
 
@@ -461,7 +457,7 @@ function runCheck({ endOfDay = false, short = false } = {}) {
       const { c, opened } = enter('prize', x.ticket, f.start);
       money('ticket', -x.ticket, c.id, f.start);
       x.contestId = c.id; g.contestId ||= c.id;
-      notes.push(`${opened ? 'Opened' : 'Entered'} ${euro(x.ticket)} prize contest #${num(c.id)}: ticket taken from your balance.`);
+      notes.push(`${opened ? 'Opened' : 'Entered'} ${cName(x.ticket)} #${num(c.id)}: ticket taken from your balance.`);
       addEntry(c, { name: P().name, tier, pair: f.pair, at: f.start, win: f.win, results, total, gid: g.id, you: true });
     }
     g.note = `Judged on all ${g.of} challenges of ${pairLabel(g.pair)}. ${notes.join(' ')}`;
@@ -546,7 +542,7 @@ const picksHtml = (picks) => picks.map((p) => `<span class="tag ${p.level}">${CH
 const signLabel = (s) => (s.pair === '*' ? 'Your next ranked game' : pairLabel(s.pair));
 const signIcon = (s) => (s.pair === '*' ? '<span class="champ any" aria-hidden="true">★</span>' : icon(splitPair(s.pair).champ));
 function signupRow(s) {
-  const what = s.kind === 'training' ? 'Training contest' : `${euro(s.ticket)} prize contest · ${picksHtml(s.picks)}`;
+  const what = s.kind === 'training' ? 'Training contest' : `${cName(s.ticket)} · ${picksHtml(s.picks)}`;
   const act = s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="Takes effect in 1 hour, if no game started before">Cancel the entry</button>` : s.contestId ? `<a class="btn ghost small" href="${s.kind === 'training' ? `#/contests/t/${s.contestId}` : `#/contest/${s.contestId}`}">Contest #${num(s.contestId)}</a>` : '';
   return `<div class="item"><div class="row nowrap">${signIcon(s)}<div class="grow"><b>${signLabel(s)}</b><div class="small muted">${what} · entered ${clock(s.at)}</div></div>${act}</div>
   <div class="row between" style="margin-top:6px">${statusTag(s)}${s.note ? `<span class="small muted grow" style="text-align:right">${esc(s.note)}</span>` : ''}</div></div>`;
@@ -704,7 +700,7 @@ function homeSentences(all, champs) {
 // No images of speech: what you do, who you compete with, how you are judged, what you win.
 const EXPLAIN = {
   training: 'You compete with 19 other players. You do not play together: each plays their own solo queue game, whenever they want. Each game is compared with the usual game of whoever played it: whoever improves most wins. You win progress points, for merch, coaching, team try-outs and real tournaments.',
-  prize: 'You buy a ticket: the chance to win, not a sure win. You choose a champion, a role and 3 challenges, and try to score as many points as you can. You compete with 19 other players: each plays their own solo queue game, whenever they want. The challenge thresholds depend on each player\'s rank. The top 8 get back more than their ticket, up to twice it for the 1st; places 9 to 14 get part of it back; places 15 to 20 get nothing. The same game also enters a training contest, so you win progress points too.',
+  prize: 'You buy a ticket: the chance to win, not a sure win. You choose a champion, a role and 3 challenges, and try to score as many points as you can. You compete with 19 other players: each plays their own solo queue game, whenever they want. The challenge thresholds depend on each player\'s rank. Three contests: Rising (2 € ticket), Pro (5 €) and Elite (10 €). The prizes go to the first 14 places; the last 6 win nothing and lose their ticket. The same game also enters a training contest, so you win progress points too.',
 };
 const STEPS = `<ol class="esteps"><li><b>1</b>Enter your next game</li><li><b>2</b>Play a solo queue game</li><li><b>3</b>See the ranking</li></ol>`;
 /** Where your training contests stand, as one instruction: enter, play, wait for the ranking, or see how it went. */
@@ -791,7 +787,7 @@ function contestsBlock(mode = 'area') {
     <header class="hc-hero">${title}
       <div class="hc-doors">
         <a class="hc-door free" href="#/contests"><span>Training contest · free</span><b>Beat your own usual game</b><small>Win progress points for coaching, merch, team try-outs and real tournaments.</small><i>See how it works →</i></a>
-        <a class="hc-door prize" href="#/contests"><span>Prize contest</span><b>Play for a prize against 19 players</b><small>Choose 3 challenges. The 1st wins twice the ticket.</small><i>See how it works →</i></a>
+        <a class="hc-door prize" href="#/contests"><span>Prize contest</span><b>Play for a prize against 19 players</b><small>Choose 3 challenges. Three contests: Rising, Pro and Elite.</small><i>See how it works →</i></a>
       </div></header></section>`;
   const tile = (cls, top, big, small, href) => `<${href ? `a href="${href}"` : 'div'} class="hc-tile ${cls}"><span>${top}</span><b>${big}</b><small>${small}</small></${href ? 'a' : 'div'}>`;
   const card = (cls, name, price, pitch, rules, tiles, honest, foot) => `<article class="hc-card ${cls}">
@@ -820,8 +816,8 @@ function contestsBlock(mode = 'area') {
         REWARDS.filter((r) => ['review', 'coaching', 'tryout'].includes(r[0])).map(([id, , cost]) => tile(bal >= cost ? 'ok' : '', `${cost} points`, REWARD_SHORT[id], { review: 'on one of your games', coaching: 'one hour, one to one', tryout: 'for a Skybreak team' }[id])),
         'Points are earned only, never bought. They also open merch and entries to real tournaments.', trainFoot)}
       ${card('prize', 'Prize contest', '', 'Play for a prize against 19 players.', ['Choose a champion, a role and 3 challenges, and try to score as many points as you can.', 'Every player is judged on thresholds for their own rank, so an Iron and a Diamond compete fairly.'],
-        TICKETS.map((t) => tile('', `${euro(t)} ticket`, euro(t * pool), `in prizes · 1st wins ${euro(t * PRIZE_X[0])}`, `#/join/${t}`)),
-        `A ticket buys the chance to win, not a sure win: in every contest the last ${nothing} of the 20 get nothing back. It includes a training contest, so you also earn progress points. <a href="#/rules/contests">Every place's prize →</a>`, prizeFoot)}
+        TICKETS.map((t) => tile('', CONTEST_NAME[t], euro(t * pool), `in prizes · ticket ${euro(t)}`, `#/join/${t}`)),
+        `<b class="hc-warn">You can lose your ticket. In every contest the last ${nothing} of the 20 win nothing.</b> The ticket lets you take part and compete for the prizes of the first ${SEATS - nothing} places: it is not a sure win. It includes a training contest, so you also earn progress points. <a href="#/rules/contests">The prizes, place by place →</a>`, prizeFoot)}
     </div>
     ${myContestsNow()}
     <ul class="hc-promise">
@@ -835,13 +831,18 @@ function contestsBlock(mode = 'area') {
 /** Everything you have going now, both kinds in one list: entries waiting for a game, contests filling up. */
 function myContestsNow() {
   const waiting = S.signups.filter(active).sort((a, b) => b.at - a.at);
-  const openC = [...Object.values(S.imp), ...Object.values(S.contests)].filter((c) => c.state === 'open' && c.entries.some((e) => e.you));
+  const mineC = [...Object.values(S.imp), ...Object.values(S.contests)].filter((c) => c.entries.some((e) => e.you));
+  const myAt = (c) => Math.max(...c.entries.filter((e) => e.you).map((e) => e.at));
+  // finished: the last 2 prize contests and the last training contest, by when your game was played
+  const doneOf = (k, n) => mineC.filter((c) => c.state === 'done' && (c.kind === 'imp') === k).sort((x, y) => myAt(y) - myAt(x)).slice(0, n);
+  const openC = mineC.filter((c) => c.state === 'open'), doneC = [...doneOf(false, 2), ...doneOf(true, 1)].sort((x, y) => myAt(y) - myAt(x));
   const rows = [
-    ...waiting.map((s) => `<div class="cn-row"><span class="cn-kind ${s.kind === 'training' ? 'free' : 'prize'}">${s.kind === 'training' ? 'Training' : euro(s.ticket)}</span><span class="cn-what"><b>${signLabel(s)}</b><small>${s.status === 'unlocking' ? `cancelling at ${clock(s.unlockAt)}` : `entered ${clock(s.at)} · waiting for your game`}</small></span>${s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="Takes effect in 1 hour, if no game started before">Cancel</button>` : ''}</div>`),
+    ...waiting.map((s) => `<div class="cn-row"><span class="cn-kind ${s.kind === 'training' ? 'free' : 'prize'}">${s.kind === 'training' ? 'Training' : CONTEST_NAME[s.ticket]}</span><span class="cn-what"><b>${signLabel(s)}</b><small>${s.status === 'unlocking' ? `cancelling at ${clock(s.unlockAt)}` : `entered ${clock(s.at)} · waiting for your game`}</small></span>${s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="Takes effect in 1 hour, if no game started before">Cancel</button>` : ''}</div>`),
     ...openC.sort((x, y) => (x.kind === 'imp') - (y.kind === 'imp')).map(nowCard),
+    ...(doneC.length ? [`<p class="cn-sep">Finished</p>`, ...doneC.map(nowCard)] : []),
   ];
-  return `<section class="cnow" aria-label="Your contests now"><header><h3>Your contests now</h3><div class="cn-check"><span class="small muted">Last check ${when(S.lastCheck)}</span><button class="btn small" data-check="manual">Check my games</button><button class="btn ghost small" data-check="day" title="Demo: the daily check removes entries not played">Skip to the end of the day</button></div></header>
-    ${rows.length ? `<div class="cn-list">${rows.join('')}</div>` : '<p class="small muted">Nothing going on: enter your next game in one of the two contests.</p>'}</section>`;
+  return `<section class="cnow" aria-label="Your contests"><header><h3>Your contests</h3><div class="cn-check"><span class="small muted">Last check ${when(S.lastCheck)}</span><button class="btn small" data-check="manual">Check my games</button><button class="btn ghost small" data-check="day" title="Demo: the daily check removes entries not played">Skip to the end of the day</button></div></header>
+    ${rows.length ? `<div class="cn-list">${rows.join('')}</div>` : '<p class="small muted">Nothing going on: enter your next game in one of the two contests.</p>'}${doneC.length ? '<p class="cn-all"><a href="#/mine/finished">All your prize contests →</a><a href="#/contests/training">All your training contests →</a></p>' : ''}</section>`;
 }
 /** The game behind one of your entries: the signed-up game and the ranked game Riot keeps (opponent, KDA). */
 function entryGame(e) {
@@ -852,29 +853,31 @@ const gameLine = (e, g, h) => { const { champ } = splitPair(e.pair), win = h ? h
   const inner = `${icon(champ)}<span class="cn-who"><b>${pairLabel(e.pair)}</b>${h?.opp ? `<span class="cn-vs">vs</span>${icon(h.opp, 'champ sm')}<b>${champName(h.opp)}</b>` : ''}</span>${win != null ? `<span class="cn-res ${win ? 'w' : 'l'}">${win ? 'Win' : 'Loss'}</span>` : ''}${h ? `<span class="cn-kda">${h.k}/${h.d}/${h.a}</span>` : ''}<span class="cn-when">${h ? `${Math.round(h.minutes)} min · ` : ''}${day(e.at)}</span>${href ? '<i>Training →</i>' : ''}`;
   return href ? `<a class="cn-game" href="${href}" title="Open this game in Training">${inner}</a>` : `<div class="cn-game">${inner}</div>`; };
 /** The provisional ranking, short: the first 3, then you with the players around you. */
-function miniRanking(c, rows, val, extra) {
+function miniRanking(c, rows, val) {
   const me = rows.findIndex((e) => e.you), show = [...new Set([0, 1, 2, me - 1, me, me + 1])].filter((i) => i >= 0 && i < rows.length).sort((a, b) => a - b);
   let last = -1; const out = [];
   for (const i of show) {
     if (i > last + 1) out.push('<li class="gap">…</li>');
     last = i; const e = rows[i];
-    out.push(`<li class="${e.you ? 'you' : ''}"><span class="p">${e._tie ? '=' : ''}${e._place}</span>${icon(splitPair(e.pair).champ, 'champ sm')}<span class="n">${e.you ? 'You' : esc(e.name)}</span><b>${val(e)}</b>${extra ? `<span class="x">${extra(e)}</span>` : ''}</li>`);
+    out.push(`<li class="${e.you ? 'you' : ''}"><span class="p">${e._tie ? '=' : ''}${e._place}</span>${icon(splitPair(e.pair).champ, 'champ sm')}<span class="n">${e.you ? 'You' : esc(e.name)}</span><b>${val(e)}</b></li>`);
   }
   const more = rows.length - 1 - last;
-  return `<div class="cn-rank"><p>Provisional ranking · ${c.entries.length} of ${SEATS} in</p><ol>${out.join('')}</ol>${more > 0 ? `<small>${more} more below · ${SEATS - c.entries.length} places still to fill</small>` : `<small>${SEATS - c.entries.length} places still to fill</small>`}</div>`;
+  const open = c.state === 'open';
+  return `<div class="cn-rank"><p>${open ? `Provisional ranking · ${c.entries.length} of ${SEATS} in` : 'Final ranking'}</p><ol>${out.join('')}</ol>${open ? `<small>${more > 0 ? `${more} more below · ` : ''}${SEATS - c.entries.length} places still to fill</small>` : more > 0 ? `<small>${more} more below</small>` : ''}</div>`;
 }
 /** One open contest you are in: your game (it opens in Training), how its score is made, and the provisional ranking.
  *  Training: improvement against the contest average, and the numbers behind it. Prize: result + 3 challenges. */
 function nowCard(c) {
   const rows = ranked(c), me = rows.find((e) => e.you), train = c.kind === 'imp', { g, h } = entryGame(me);
   const href = train ? `#/contests/t/${c.id}` : `#/contest/${c.id}`;
-  const head = (right) => `<header class="cn-head"><span class="cn-kind ${train ? 'free' : 'prize'}">${train ? 'Training' : `${euro(c.ticket)} ticket`}</span><a href="${href}"><b>${train ? 'Training' : 'Prize'} contest #${num(c.id)}</b></a><span class="cn-place"><b>${me._tie ? '=' : ''}${ord(me._place)}</b>${right}</span></header>`;
+  const done = c.state === 'done';
+  const head = (right) => `<header class="cn-head ${done ? 'done' : ''}"><span class="cn-kind ${train ? 'free' : 'prize'}">${train ? 'Training' : 'Prize'}</span><a href="${href}"><b>${train ? 'Training contest' : cName(c.ticket)} #${num(c.id)}</b></a><span class="cn-place"><b>${me._tie ? '=' : ''}${ord(me._place)} place</b>${right}</span></header>`;
   const it = (label, value, cls = '', title = '') => `<span class="cn-it ${cls}"${title ? ` title="${title}"` : ''}><small>${label}</small><b>${value}</b></span>`;
   if (train) {
     const cp = contestPoints(c, me), ip = h ? improvementParts(h) : { parts: [] };
     const up = ip.parts.filter((x) => x.z >= 0.3).slice(0, 2), down = ip.parts.filter((x) => x.z <= -0.3).slice(-1);
     const chip = (x, cls) => `<span class="cn-part ${cls}">${cls === 'up' ? '▲' : '▼'} ${x.m.name} <b>${x.m.f(x.v)}</b><small>usual ${x.m.f(x.ref)}</small></span>`;
-    return `<article class="cn-card free">${head(`<small>${signed(cp.pts)} points</small>`)}<div class="cn-body"><div class="cn-main">${gameLine(me, g, h)}
+    return `<article class="cn-card free">${head(done ? `<small>${signed(cp.pts)} points</small>` : '<small>so far</small>')}<div class="cn-body"><div class="cn-main">${gameLine(me, g, h)}
       <div class="cn-sum">${it('Your improvement', signed(me.total), me.total >= 0 ? 'up' : 'down')}<span class="op">vs</span>${it('Contest average', signed(cp.field))}<span class="op">→</span>${it('Points', signed(cp.pts), `tot ${cp.pts >= 0 ? 'up' : 'down'}`)}</div>
       ${up.length || down.length ? `<div class="cn-parts">${up.map((x) => chip(x, 'up')).join('')}${down.map((x) => chip(x, 'down')).join('')}${ip.by ? `<small>against your usual ${ip.by}</small>` : ''}</div>` : ''}</div>
       ${miniRanking(c, rows, (e) => signed(e.total))}</div></article>`;
@@ -882,10 +885,10 @@ function nowCard(c) {
   const mark = (r) => (r.full ? '✓' : r.frac > 0 ? '◐' : '✗');
   const ch = me.results.map((r) => it(`${mark(r)} ${CH[r.id].name} ${LV[r.level]}`, `${r.points}<i>/${POINTS[r.level]}</i>`, r.full ? 'ok' : r.frac > 0 ? 'part' : 'no', `you ${fmt(r.id, r.value)} · needed ${CH[r.id].format === 'share-max' ? 'at most ' : ''}${fmt(r.id, r.hi)}`)).join('<span class="op">+</span>');
   const vals = me.results.map((r) => `${CH[r.id].name} ${fmt(r.id, r.value)} (needed ${CH[r.id].format === 'share-max' ? 'at most ' : ''}${fmt(r.id, r.hi)})`).join(' · ');
-  return `<article class="cn-card prize">${head(`<small>${me._prize ? `pays ${euro2(me._prize)} now` : 'no prize now'}</small>`)}<div class="cn-body"><div class="cn-main">${gameLine(me, g, h)}
+  return `<article class="cn-card prize">${head(done ? `<small>${me._prize ? `You won <b class="won">${euro2(me._prize)}</b>` : 'No prize this time'}</small>` : '<small>so far</small>')}<div class="cn-body"><div class="cn-main">${gameLine(me, g, h)}
     <div class="cn-sum">${it(me.win ? 'Win' : 'Loss', resultPts(me.win), 'res')}<span class="op">+</span>${ch}<span class="op">=</span>${it('Total', me.total, 'tot')}</div>
     <p class="cn-vals">${vals}</p></div>
-    ${miniRanking(c, rows, (e) => e.total, (e) => (e._prize ? euro2(e._prize) : '—'))}</div></article>`;
+    ${miniRanking(c, rows, (e) => e.total)}</div></article>`;
 }
 /** #/contests/training: the training contest on its own, with the progress, the rewards and every contest you played. */
 function viewTrainingArea() {
@@ -2270,7 +2273,7 @@ const placeOf = (c) => { const me = ranked(c).find((e) => e.you); return me ? me
 /** What a player gets back by place, as a share of the ticket: the one prize table of the app. */
 const PRIZE_ROWS = [...PRIZE_X.slice(0, 14).map((x, i) => [ord(i + 1), x]), ['15th-20th', 0]];
 function prizeTable() {
-  return `<div class="tablewrap"><table class="num prizes"><tr><th>Place</th><th>You get back</th>${TICKETS.map((t) => `<th>${euro(t)} ticket</th>`).join('')}</tr>${PRIZE_ROWS.map(([n, x]) => `<tr class="${x > 1 ? 'top' : x === 1 ? 'back' : x > 0 ? 'part' : 'none'}"><td>${n}</td><td><b>${x ? `×${x}` : 'nothing'}</b></td>${TICKETS.map((t) => `<td>${x ? euro2(t * x) : '—'}</td>`).join('')}</tr>`).join('')}</table></div>`;
+  return `<div class="tablewrap"><table class="num prizes"><tr><th>Place</th>${TICKETS.map((t) => `<th>${CONTEST_NAME[t]}<small>${euro(t * PRIZE_X.reduce((a, x) => a + x, 0))} in prizes</small></th>`).join('')}</tr>${PRIZE_ROWS.map(([n, x]) => `<tr class="${x > 1 ? 'top' : x === 1 ? 'back' : x > 0 ? 'part' : 'none'}"><td>${n}</td>${TICKETS.map((t) => `<td>${x ? euro2(t * x) : 'nothing'}</td>`).join('')}</tr>`).join('')}</table></div>`;
 }
 function viewLobby(arg = '') {
   if (needAccount()) return;
@@ -2294,7 +2297,7 @@ function viewJoin(ticket) {
   const offers = offersOf(d.pair), r = rec();
   const pts = d.picks.reduce((a, x) => a + POINTS[x.level], 0);
   const slot = (i) => { const p = d.picks[i]; return `<div class="slot ${p ? 'full' : ''}"><span class="n">${i + 1}</span>${p ? `<b>${CH[p.id].name}</b> <span class="tag ${p.level}">${p.level}</span> <button class="x" data-rm="${i}" aria-label="Remove">×</button>` : '<span class="muted">empty</span>'}</div>`; };
-  app.innerHTML = `<p><a href="#/contests">← Contests</a></p><div class="hello"><div><p class="eyebrow">Prize contest · 20 players</p><h1>${euro(ticket)} ticket</h1><p class="join-sub">${euro(ticket * PRIZE_X.reduce((a, x) => a + x, 0))} in prizes · the 1st wins ${euro(ticket * PRIZE_X[0])} · the top 8 get back more than the ticket · the last 6 get nothing.</p><div class="chips join-tix">${TICKETS.map((t) => `<a class="chip ${t === ticket ? 'on' : ''}" href="#/join/${t}">${euro(t)}</a>`).join('')}</div></div><div class="stepper"><span class="${d.pair ? 'on' : ''}">① Pair</span><span class="${d.picks.length ? 'on' : ''}">② Challenges</span><span class="${d.picks.length === 3 ? 'on' : ''}">③ Enter</span></div></div>
+  app.innerHTML = `<p><a href="#/contests">← Contests</a></p><div class="hello"><div><p class="eyebrow">Prize contest · 20 players</p><h1>${cName(ticket)}</h1><p class="join-sub">Ticket ${euro(ticket)} · ${euro(ticket * PRIZE_X.reduce((a, x) => a + x, 0))} in prizes for the first 14 places · <b>the last 6 win nothing and lose their ticket.</b></p><div class="chips join-tix">${TICKETS.map((t) => `<a class="chip ${t === ticket ? 'on' : ''}" href="#/join/${t}">${CONTEST_NAME[t]} · ${euro(t)}</a>`).join('')}</div></div><div class="stepper"><span class="${d.pair ? 'on' : ''}">① Pair</span><span class="${d.picks.length ? 'on' : ''}">② Challenges</span><span class="${d.picks.length === 3 ? 'on' : ''}">③ Enter</span></div></div>
   <h2>① Pair</h2><section class="card">${pp.html}</section>
   <h2 id="step2">② Three challenges for ${pairLabel(d.pair)}</h2><div class="slots">${[0, 1, 2].map(slot).join('')}</div>
   <p class="small muted">Thresholds for a ${tierName(tier)} player. Under each level: how often your signed-up games made it. ${rl('challenges')}</p>
@@ -2338,10 +2341,10 @@ function viewMine(tab) {
     body = `${checkBar()}${act.length ? `<div class="list">${act.map(signupRow).join('')}</div>` : '<p class="muted">Nothing entered. <a href="#/contests">Join a prize contest</a>.</p>'}${ended.length ? `<h2>Ended sign-ups</h2><div class="list">${ended.map(signupRow).join('')}</div>` : ''}`;
   } else if (t === 'progress') {
     const l = mineC.filter((c) => c.state === 'open');
-    body = l.length ? `<div class="list">${l.map((c) => { const me = ranked(c).find((e) => e.you); return `<a class="item link" href="#/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>#${num(c.id)} · ${euro(c.ticket)}</b><div class="small muted">${c.entries.length}/${SEATS} games · ${me.total} pts</div></div><span class="big">${ord(me._place)}</span></div></a>`; }).join('')}</div>` : '<p class="muted">No open contest with your games.</p>';
+    body = l.length ? `<div class="list">${l.map((c) => { const me = ranked(c).find((e) => e.you); return `<a class="item link" href="#/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>${cName(c.ticket)} #${num(c.id)}</b><div class="small muted">${c.entries.length}/${SEATS} games · ${me.total} pts</div></div><span class="big">${ord(me._place)}</span></div></a>`; }).join('')}</div>` : '<p class="muted">No open contest with your games.</p>';
   } else {
     const l = mineC.filter((c) => c.state === 'done').sort((a, b) => b.closedAt - a.closedAt);
-    body = l.length ? `<div class="list">${l.map((c) => { const me = c.entries.find((e) => e.you); return `<a class="item link" href="#/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>#${num(c.id)} · ${euro(c.ticket)}</b><div class="small muted">${day(c.closedAt)} · ${me.total} pts</div></div><span class="big">${ord(me.place)}</span><span class="${me.prize ? 'w' : 'muted'}">${me.prize ? `+${euro2(me.prize)}` : 'no prize'}</span></div></a>`; }).join('')}</div>` : '<p class="muted">No finished contest yet.</p>';
+    body = l.length ? `<div class="list">${l.map((c) => { const me = c.entries.find((e) => e.you); return `<a class="item link" href="#/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>${cName(c.ticket)} #${num(c.id)}</b><div class="small muted">${day(c.closedAt)} · ${me.total} pts</div></div><span class="big">${ord(me.place)}</span><span class="${me.prize ? 'w' : 'muted'}">${me.prize ? `won ${euro2(me.prize)}` : 'no prize'}</span></div></a>`; }).join('')}</div>` : '<p class="muted">No finished contest yet.</p>';
   }
   app.innerHTML = `<h1>My contests</h1>${tabs([['#/mine', 'Waiting', 'waiting'], ['#/mine/progress', 'In progress', 'progress'], ['#/mine/finished', 'Finished', 'finished']], t)}${body}`;
 }
@@ -2351,8 +2354,8 @@ function viewContest(id) {
   const c = S.contests[id];
   if (!c) { app.innerHTML = '<p>Contest not found. <a href="#/contests">Lobby</a></p>'; return; }
   const rows = c.state === 'done' ? [...c.entries].sort((a, b) => a.place - b.place || a.at - b.at).map((e) => ({ ...e, _place: e.place, _prize: e.prize, _tie: c.entries.filter((x) => x.place === e.place).length > 1 })) : ranked(c);
-  const zoneOf = (p) => (PRIZE_X[p - 1] > 1 ? 'top' : PRIZE_X[p - 1] === 1 ? 'back' : PRIZE_X[p - 1] > 0 ? 'part' : 'none');
-  const ZONE = { top: 'Prize', back: 'Ticket back', part: '0.8× ticket', none: 'No prize' };
+  const zoneOf = (p) => (PRIZE_X[p - 1] > 0 ? 'top' : 'none');
+  const ZONE = { top: 'Prizes', back: 'Prizes', part: 'Prizes', none: 'No prize' };
   const me = rows.find((e) => e.you);
   const above = me && rows.filter((e) => e._place < me._place).pop();
   let lastZone = null;
@@ -2364,13 +2367,13 @@ function viewContest(id) {
     const res = `<span class="res ${e.win ? 'ok' : 'no'}">${e.win ? 'Win' : 'Loss'} ${resultPts(e.win)}</span>` + e.results.map((r) => `<span class="res ${r.full ? 'ok' : r.frac > 0 ? 'part' : 'no'}" title="${CH[r.id].name} ${r.level}: ${fmt(r.id, r.value)} for ${fmt(r.id, r.hi)}">${r.full ? '✓' : r.frac > 0 ? '◐' : '✗'} ${CH[r.id].name} ${LV[r.level]}</span>`).join('');
     return `${sep}<tr class="${e.you ? 'you' : ''} z-${z}" data-row="${k}"><td><span class="place">${e._tie ? '=' : ''}${e._place}</span></td>
     <td><div class="row nowrap">${icon(splitPair(e.pair).champ)}<div><b>${esc(e.name)}</b>${e.you ? ' <span class="tag gold">you</span>' : ''}<div class="small muted">${tierName(e.tier)} · ${pairLabel(e.pair)}</div></div></div></td>
-    <td class="chs">${res}</td><td class="pts"><b class="kpi">${e.total}</b></td><td class="prize">${e._prize ? euro2(e._prize) : '<span class="muted">—</span>'}</td></tr>
+    <td class="chs">${res}</td><td class="pts"><b class="kpi">${e.total}</b></td>${c.state === 'done' ? `<td class="prize">${e._prize ? euro2(e._prize) : '<span class="muted">—</span>'}</td>` : ''}</tr>
     ${openRows.has(k) ? `<tr class="detail"><td></td><td colspan="4">${e.results.map((r) => `<div class="small">${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span> ${fmt(r.id, r.value)} for a line of ${fmt(r.id, r.hi)} → <b>${r.points}</b> pts</div>`).join('')}</td></tr>` : ''}`;
   }).join('');
-  app.innerHTML = `<p><a href="#/contests">← Lobby</a></p><div class="hello contest-head ${c.state === 'done' ? 'is-finished' : ''}"><div><p class="eyebrow">${euro(c.ticket)} contest · 20 players · 1st place ${euro(c.ticket * 2)} · rules v1 ${rl('changes', '')}</p><h1>Contest #${num(c.id)}</h1>
-  <p class="sub">${c.state === 'open' ? `<span class="tag wait">Open ${c.entries.length}/${SEATS}</span> Provisional: it changes as games come in.` : `<span class="tag ok">Finished</span> ${day(c.closedAt)}.${me ? (me.prize ? ` <b>${euro2(me.prize)} credited to your wallet.</b>` : '') + (above ? ` ${Math.round((above.total - me.total) * 10) / 10} points to the place above.` : '') : ''}`} Riot IDs only; each player measured against their own tier. Tap a row for the values.</p></div>
+  app.innerHTML = `<p><a href="#/contests">← Lobby</a></p><div class="hello contest-head ${c.state === 'done' ? 'is-finished' : ''}"><div><p class="eyebrow">Prize contest · 20 players · rules v1 ${rl('changes', '')}</p><h1>${cName(c.ticket)} #${num(c.id)}</h1>
+  <p class="sub">${c.state === 'open' ? `<span class="tag wait">Open ${c.entries.length}/${SEATS}</span> Provisional: it changes as games come in.` : `<span class="tag ok">Finished</span> ${day(c.closedAt)}.${me ? (me.prize ? ` <b>${ord(me.place)} place: you won ${euro2(me.prize)}.</b> It is in your wallet.` : '') + (above ? ` ${Math.round((above.total - me.total) * 10) / 10} points to the place above.` : '') : ''}`} Riot IDs only; each player measured against their own tier. Tap a row for the values.</p></div>
   <div class="counter"><b>${c.entries.length}</b><span>of ${SEATS}</span></div></div>
-  <table class="lb"><tr class="head"><th>#</th><th>Player</th><th>Challenges</th><th style="text-align:right">Pts</th><th style="text-align:right">Prize</th></tr>${html}</table>
+  <table class="lb"><tr class="head"><th>#</th><th>Player</th><th>Challenges</th><th style="text-align:right">Pts</th>${c.state === 'done' ? '<th style="text-align:right">Won</th>' : ''}</tr>${html}</table>
   <p class="small muted" style="margin-top:8px">✓ made it · ◐ part of the way (window scoring) · ✗ missed. “=” is a tie: tied players share the prizes of the places they hold. ${rl('contests')}</p>`;
   app.querySelectorAll('[data-row]').forEach((tr) => (tr.onclick = () => { const k = tr.dataset.row; openRows.has(k) ? openRows.delete(k) : openRows.add(k); const y = scrollY; viewContest(id); scrollTo(0, y); }));
 }
@@ -2434,7 +2437,7 @@ function dataList() {
 const dataProof = () => `On newer games the challenges happened 60.1%, 35.1% and 15.0% of the time. A player's results on odd and even games correlate ${D.facts.follow.toFixed(2)}; winning alone, ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most ×${D.facts.edgeChampion.toFixed(2)}.`;
 const RULES = [
   ['what', 'What Skybreak is', `<p>Skybreak judges your ranked solo games against the average player of your tier with the same champion and role. The challenges and their thresholds are the same everywhere in the app. Two areas on the same judgement:</p>
-  <ul><li><b>Personal area</b> (free): Intelligence, to study the game, and Training, to fix your own game. Analysis only.</li><li><b>Contest area</b>: free training contests, where whoever improves most earns progress points, and prize contests of 20 players with a 2, 5 or 10 € ticket; the top 8 get back more than their ticket, up to twice it for the 1st; places 15 to 20 get nothing.</li></ul><p>Nothing appears on your screen during the game: no overlay, no pop-ups.</p>`],
+  <ul><li><b>Personal area</b> (free): Intelligence, to study the game, and Training, to fix your own game. Analysis only.</li><li><b>Contest area</b>: free training contests, where whoever improves most earns progress points, and prize contests of 20 players: Rising, Pro and Elite, with a 2, 5 or 10 € ticket. The prizes go to the first 14 places; the last 6 win nothing and lose their ticket.</li></ul><p>Nothing appears on your screen during the game: no overlay, no pop-ups.</p>`],
   ['accounts', 'Accounts', `<div class="tablewrap"><table><tr><th></th><th>Base</th><th>Verified</th></tr><tr><td>What you can do</td><td>the whole personal area; look at the contest lobby and leaderboards</td><td>also: prize contests, the wallet, using points</td></tr><tr><td>What it needs</td><td>email, password, country, the rules accepted, your Riot account linked with Riot Sign On</td><td>also: first and last name, date of birth, address, a document</td></tr></table></div>
   <ul><li>One person has one Skybreak account and one Riot account.</li><li><b>The linked Riot account can never be changed.</b></li><li>Skybreak never asks for your Riot password.</li><li>In contests, other players see only your Riot ID.</li><li>You can download your data and ask for deletion; first withdraw your balance and wait for open contests to finish.</li></ul>`],
   ['personal', 'Personal area', `<ul><li><b>Intelligence:</b> all your ranked solo games, your mains against the players of your tier, and every champion's numbers by role and tier. No rating, and no advice on which challenges to pick in contests.</li>
