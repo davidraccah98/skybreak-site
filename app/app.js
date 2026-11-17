@@ -22,6 +22,9 @@ const tierName = (t) => t[0] + t.slice(1).toLowerCase();
 const CH = Object.fromEntries(D.challenges.map((c) => [c.id, c]));
 const PRIZE_X = [2, 1.8, 1.6, 1.2, 1.15, 1.11, 1.06, 1.01, 0.96, 0.92, 0.87, 0.82, 0.77, 0.73, 0, 0, 0, 0, 0, 0]; // decided 17 November 2026
 const SEATS = 20;
+const RESULT_PTS = { win: 100, loss: 50 }; // decided 17 November 2026: a prize contest score is the result plus the 3 challenges
+const resultPts = (win) => (win ? RESULT_PTS.win : RESULT_PTS.loss);
+const prizeTotal = (win, results) => Math.round((resultPts(win) + results.reduce((a, r) => a + r.points, 0)) * 10) / 10;
 const TICKETS = [200, 500, 1000];
 const HOUR = 3600e3;
 const DAY = 24 * HOUR;
@@ -42,6 +45,12 @@ function load() {
   // Older demo sessions could point to one of the anonymous comparison profiles.
   // The reviewer experience now exposes only the real Er Zebbor dataset.
   if (S.profile != null && S.profile !== DEMO_PROFILE) S = fresh();
+  if (S.profile != null && !S.winPts) {
+    for (const c of Object.values(S.contests)) if (c.state === 'open') for (const e of c.entries) e.total = prizeTotal(e.win, e.results);
+    for (const g of S.games) if (g.results && S.contests[g.contestId]?.state === 'open') g.total = prizeTotal(g.win, g.results);
+    S.winPts = true; save();
+  }
+  if (S.profile != null && !S.nowSeed) { seedOpenPrize(); save(); }
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* private mode: works until reload */ } }
 const uid = (p) => `${p}${S.seq++}`;
@@ -261,7 +270,7 @@ function randomPicks(pair) {
 function botEntry(at) {
   const pair = pick(pairKeys), tier = pick(TIERS), picks = randomPicks(pair), win = rnd() < 0.5, skill = (rnd() - 0.5) * 0.1;
   const results = picks.map((p) => { const value = valueAt(pair, p.id, win, Math.max(0.001, Math.min(0.999, rnd() + skill + gauss() * 0.03)), tier); return { ...p, value, ...score(pair, p, value, win, tier) }; });
-  return { name: botName(), tier, pair, at, win, results, total: Math.round(results.reduce((a, r) => a + r.points, 0) * 10) / 10, you: false };
+  return { name: botName(), tier, pair, at, win, results, total: prizeTotal(win, results), you: false };
 }
 const impBot = (at) => ({ name: botName(), tier: pick(TIERS), pair: pick(pairKeys), at, total: Math.round((gauss() * 0.8 + 0.05) * 10) / 10, you: false });
 function newContest(kind, ticket, at) {
@@ -314,7 +323,7 @@ function enter(kind, ticket, at) {
 // ---------- signing in: the account's history and a few past contests ----------
 function signIn(i) {
   S = fresh({ signupForm: S.signupForm });
-  S.profile = i;
+  S.profile = i; S.winPts = true;
   const all = PROFILES[i].games;
   const past = Math.floor(all.length * PAST_SHARE);
   const shift = S.now - DAY - all[past - 1].start; // real results; dates moved so the last game was yesterday
@@ -344,7 +353,7 @@ function signIn(i) {
     cg.picks = Object.keys(cg.pos).sort((a, b) => cg.pos[b] - cg.pos[a]).slice(0, 3)
       .map((id) => ({ id, level: cg.reach[id] || LEVELS.find((l, i) => offersOf(cg.pair)[id][i] != null) }));
     cg.results = cg.picks.map((p) => { const value = cg.v[p.id] ?? valueAt(cg.pair, p.id, cg.win, 0.5, P().tier); return { ...p, value, ...score(cg.pair, p, value, cg.win, P().tier) }; });
-    cg.total = Math.round(cg.results.reduce((a, r) => a + r.points, 0) * 10) / 10;
+    cg.total = prizeTotal(cg.win, cg.results);
     const c = newContest('prize', 200, cg.start - 5 * HOUR);
     for (let b = 0; b < SEATS - 1; b++) c.entries.push(botEntry(c.createdAt + b * 20 * 60e3));
     money('ticket', -200, c.id, cg.start);
@@ -360,9 +369,42 @@ function signIn(i) {
     const n = k === 0 ? 8 + Math.floor(rnd() * 9) : SEATS;
     for (let b = 0; b < n; b++) addEntry(c, botEntry(c.createdAt + b * 20 * 60e3), true);
   }
+  seedOpenPrize();
   S.cursor = past;
   save();
   location.hash = '#/home';
+}
+
+/** Demo: the 3 challenges a player would lock before this game, from its earlier games on the pair: the ones it
+ *  made most often, at the hardest level it makes at least half the time. Only levels with a line in a win and in a loss. */
+function seedPicks(g) {
+  const tier = P().tier, offers = offersOf(g.pair);
+  const prior = S.games.filter((x) => x.analysed && x.pair === g.pair && x.start < g.start);
+  const has = (id, l) => lineOf(g.pair, id, l, true, tier) != null && lineOf(g.pair, id, l, false, tier) != null;
+  const rate = (id, l) => { const n = prior.filter((x) => x.v[id] != null); return n.length ? n.filter((x) => x.v[id] >= lineOf(x.pair, id, l, x.win, tier)).length / n.length : 0; };
+  const ids = Object.keys(offers).filter((id) => g.v[id] != null && LEVELS.some((l) => has(id, l))).sort((x, y) => rate(y, 'easy') - rate(x, 'easy')).slice(0, 3);
+  // the surest challenge at hard, the next at medium, the last at easy (the nearest level offered)
+  return ids.map((id, i) => { const want = ['hard', 'medium', 'easy'][i], ok = LEVELS.filter((l) => has(id, l)); return { id, level: ok.includes(want) ? want : ok.sort((x, y) => Math.abs(LEVELS.indexOf(x) - LEVELS.indexOf(want)) - Math.abs(LEVELS.indexOf(y) - LEVELS.indexOf(want)))[0] }; });
+}
+/** Demo: the account's two latest games are also in prize contests still filling up (5 € and 2 €), with the
+ *  3 challenges it made most often in its earlier games on that pair: so the contest area shows how a game scores. */
+function seedOpenPrize() {
+  S.nowSeed = true;
+  const tier = P().tier;
+  const hist = S.games.filter((g) => g.analysed && /^H/.test(g.id) && g.kind === 'training').sort((a, b) => b.start - a.start);
+  for (const [g, ticket] of [[hist[0], 500], [hist[1], 200]]) {
+    if (!g || S.balance < ticket) continue;
+    g.picks = seedPicks(g);
+    if (g.picks.length < 3) continue;
+    g.results = g.picks.map((p) => { const value = g.v[p.id]; return { ...p, value, ...score(g.pair, p, value, g.win, tier) }; });
+    g.total = prizeTotal(g.win, g.results);
+    const { c } = enter('prize', ticket, g.start);
+    c.createdAt = Math.min(c.createdAt, g.start - 2 * HOUR);
+    money('ticket', -ticket, c.id, g.start);
+    addEntry(c, { name: P().name, tier, pair: g.pair, at: g.start, win: g.win, results: g.results, total: g.total, gid: g.id, you: true }, true);
+    g.impId = g.contestId; g.kind = 'contest'; g.contestId = c.id;
+    g.note = `Contest game: entered ${euro(ticket)} prize contest #${num(c.id)}, with its training contest.`;
+  }
 }
 
 // ---------- the check (same rules for training and contests) ----------
@@ -414,13 +456,13 @@ function runCheck({ endOfDay = false, short = false } = {}) {
     if (!prizes.length) g.contestId = g.impId;
     for (const x of prizes) {
       const results = x.picks.map((p) => { const value = f.v[p.id] ?? valueAt(f.pair, p.id, f.win, 0.5, tier); return { ...p, value, ...score(f.pair, p, value, f.win, tier) }; });
-      const total = Math.round(results.reduce((a, r) => a + r.points, 0) * 10) / 10;
+      const total = prizeTotal(f.win, results);
       if (!g.results) { g.picks = x.picks; g.results = results; g.total = total; }
       const { c, opened } = enter('prize', x.ticket, f.start);
       money('ticket', -x.ticket, c.id, f.start);
       x.contestId = c.id; g.contestId ||= c.id;
       notes.push(`${opened ? 'Opened' : 'Entered'} ${euro(x.ticket)} prize contest #${num(c.id)}: ticket taken from your balance.`);
-      addEntry(c, { name: P().name, tier, pair: f.pair, at: f.start, win: f.win, results, total, you: true });
+      addEntry(c, { name: P().name, tier, pair: f.pair, at: f.start, win: f.win, results, total, gid: g.id, you: true });
     }
     g.note = `Judged on all ${g.of} challenges of ${pairLabel(g.pair)}. ${notes.join(' ')}`;
     for (const o of S.signups) if (active(o) && o.kind === 'contest' && o.ticket > S.balance) { o.status = 'removed'; o.note = 'Removed: your balance no longer covers this ticket. Nothing was charged.'; }
@@ -796,10 +838,54 @@ function myContestsNow() {
   const openC = [...Object.values(S.imp), ...Object.values(S.contests)].filter((c) => c.state === 'open' && c.entries.some((e) => e.you));
   const rows = [
     ...waiting.map((s) => `<div class="cn-row"><span class="cn-kind ${s.kind === 'training' ? 'free' : 'prize'}">${s.kind === 'training' ? 'Training' : euro(s.ticket)}</span><span class="cn-what"><b>${signLabel(s)}</b><small>${s.status === 'unlocking' ? `cancelling at ${clock(s.unlockAt)}` : `entered ${clock(s.at)} · waiting for your game`}</small></span>${s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="Takes effect in 1 hour, if no game started before">Cancel</button>` : ''}</div>`),
-    ...openC.map((c) => { const me = ranked(c).find((e) => e.you), train = c.kind === 'imp'; return `<a class="cn-row link" href="${train ? `#/contests/t/${c.id}` : `#/contest/${c.id}`}"><span class="cn-kind ${train ? 'free' : 'prize'}">${train ? 'Training' : euro(c.ticket)}</span><span class="cn-what"><b>${train ? 'Training' : 'Prize'} contest #${num(c.id)}</b><small>${c.entries.length} of ${SEATS} games in</small></span><span class="cn-place">${ord(me._place)}</span></a>`; }),
+    ...openC.sort((x, y) => (x.kind === 'imp') - (y.kind === 'imp')).map(nowCard),
   ];
   return `<section class="cnow" aria-label="Your contests now"><header><h3>Your contests now</h3><div class="cn-check"><span class="small muted">Last check ${when(S.lastCheck)}</span><button class="btn small" data-check="manual">Check my games</button><button class="btn ghost small" data-check="day" title="Demo: the daily check removes entries not played">Skip to the end of the day</button></div></header>
     ${rows.length ? `<div class="cn-list">${rows.join('')}</div>` : '<p class="small muted">Nothing going on: enter your next game in one of the two contests.</p>'}</section>`;
+}
+/** The game behind one of your entries: the signed-up game and the ranked game Riot keeps (opponent, KDA). */
+function entryGame(e) {
+  const g = S.games.find((x) => (e.gid && x.id === e.gid) || (!e.gid && x.start === e.at && x.pair === e.pair));
+  return { g, h: g ? historyGame(g) : null };
+}
+const gameLine = (e, g, h) => { const { champ } = splitPair(e.pair), win = h ? h.win : e.win, href = g ? `#/train/game/${g.id}` : h ? `#/train/match/${h.id}` : null;
+  const inner = `${icon(champ)}<span class="cn-who"><b>${pairLabel(e.pair)}</b>${h?.opp ? `<span class="cn-vs">vs</span>${icon(h.opp, 'champ sm')}<b>${champName(h.opp)}</b>` : ''}</span>${win != null ? `<span class="cn-res ${win ? 'w' : 'l'}">${win ? 'Win' : 'Loss'}</span>` : ''}${h ? `<span class="cn-kda">${h.k}/${h.d}/${h.a}</span>` : ''}<span class="cn-when">${h ? `${Math.round(h.minutes)} min · ` : ''}${day(e.at)}</span>${href ? '<i>Training →</i>' : ''}`;
+  return href ? `<a class="cn-game" href="${href}" title="Open this game in Training">${inner}</a>` : `<div class="cn-game">${inner}</div>`; };
+/** The provisional ranking, short: the first 3, then you with the players around you. */
+function miniRanking(c, rows, val, extra) {
+  const me = rows.findIndex((e) => e.you), show = [...new Set([0, 1, 2, me - 1, me, me + 1])].filter((i) => i >= 0 && i < rows.length).sort((a, b) => a - b);
+  let last = -1; const out = [];
+  for (const i of show) {
+    if (i > last + 1) out.push('<li class="gap">…</li>');
+    last = i; const e = rows[i];
+    out.push(`<li class="${e.you ? 'you' : ''}"><span class="p">${e._tie ? '=' : ''}${e._place}</span>${icon(splitPair(e.pair).champ, 'champ sm')}<span class="n">${e.you ? 'You' : esc(e.name)}</span><b>${val(e)}</b>${extra ? `<span class="x">${extra(e)}</span>` : ''}</li>`);
+  }
+  const more = rows.length - 1 - last;
+  return `<div class="cn-rank"><p>Provisional ranking · ${c.entries.length} of ${SEATS} in</p><ol>${out.join('')}</ol>${more > 0 ? `<small>${more} more below · ${SEATS - c.entries.length} places still to fill</small>` : `<small>${SEATS - c.entries.length} places still to fill</small>`}</div>`;
+}
+/** One open contest you are in: your game (it opens in Training), how its score is made, and the provisional ranking.
+ *  Training: improvement against the contest average, and the numbers behind it. Prize: result + 3 challenges. */
+function nowCard(c) {
+  const rows = ranked(c), me = rows.find((e) => e.you), train = c.kind === 'imp', { g, h } = entryGame(me);
+  const href = train ? `#/contests/t/${c.id}` : `#/contest/${c.id}`;
+  const head = (right) => `<header class="cn-head"><span class="cn-kind ${train ? 'free' : 'prize'}">${train ? 'Training' : `${euro(c.ticket)} ticket`}</span><a href="${href}"><b>${train ? 'Training' : 'Prize'} contest #${num(c.id)}</b></a><span class="cn-place"><b>${me._tie ? '=' : ''}${ord(me._place)}</b>${right}</span></header>`;
+  const it = (label, value, cls = '', title = '') => `<span class="cn-it ${cls}"${title ? ` title="${title}"` : ''}><small>${label}</small><b>${value}</b></span>`;
+  if (train) {
+    const cp = contestPoints(c, me), ip = h ? improvementParts(h) : { parts: [] };
+    const up = ip.parts.filter((x) => x.z >= 0.3).slice(0, 2), down = ip.parts.filter((x) => x.z <= -0.3).slice(-1);
+    const chip = (x, cls) => `<span class="cn-part ${cls}">${cls === 'up' ? '▲' : '▼'} ${x.m.name} <b>${x.m.f(x.v)}</b><small>usual ${x.m.f(x.ref)}</small></span>`;
+    return `<article class="cn-card free">${head(`<small>${signed(cp.pts)} points</small>`)}<div class="cn-body"><div class="cn-main">${gameLine(me, g, h)}
+      <div class="cn-sum">${it('Your improvement', signed(me.total), me.total >= 0 ? 'up' : 'down')}<span class="op">vs</span>${it('Contest average', signed(cp.field))}<span class="op">→</span>${it('Points', signed(cp.pts), `tot ${cp.pts >= 0 ? 'up' : 'down'}`)}</div>
+      ${up.length || down.length ? `<div class="cn-parts">${up.map((x) => chip(x, 'up')).join('')}${down.map((x) => chip(x, 'down')).join('')}${ip.by ? `<small>against your usual ${ip.by}</small>` : ''}</div>` : ''}</div>
+      ${miniRanking(c, rows, (e) => signed(e.total))}</div></article>`;
+  }
+  const mark = (r) => (r.full ? '✓' : r.frac > 0 ? '◐' : '✗');
+  const ch = me.results.map((r) => it(`${mark(r)} ${CH[r.id].name} ${LV[r.level]}`, `${r.points}<i>/${POINTS[r.level]}</i>`, r.full ? 'ok' : r.frac > 0 ? 'part' : 'no', `you ${fmt(r.id, r.value)} · needed ${CH[r.id].format === 'share-max' ? 'at most ' : ''}${fmt(r.id, r.hi)}`)).join('<span class="op">+</span>');
+  const vals = me.results.map((r) => `${CH[r.id].name} ${fmt(r.id, r.value)} (needed ${CH[r.id].format === 'share-max' ? 'at most ' : ''}${fmt(r.id, r.hi)})`).join(' · ');
+  return `<article class="cn-card prize">${head(`<small>${me._prize ? `pays ${euro2(me._prize)} now` : 'no prize now'}</small>`)}<div class="cn-body"><div class="cn-main">${gameLine(me, g, h)}
+    <div class="cn-sum">${it(me.win ? 'Win' : 'Loss', resultPts(me.win), 'res')}<span class="op">+</span>${ch}<span class="op">=</span>${it('Total', me.total, 'tot')}</div>
+    <p class="cn-vals">${vals}</p></div>
+    ${miniRanking(c, rows, (e) => e.total, (e) => (e._prize ? euro2(e._prize) : '—'))}</div></article>`;
 }
 /** #/contests/training: the training contest on its own, with the progress, the rewards and every contest you played. */
 function viewTrainingArea() {
@@ -1764,8 +1850,17 @@ function improvementModel() {
     raw.set(h.id, xs.length ? avg(xs) : null);
   }
   const rs = [...raw.values()].filter((x) => x != null);
-  impModel = { key, raw, sd: Math.sqrt(avg(rs.map((x) => x * x))) || 1 };
+  impModel = { key, raw, sd: Math.sqrt(avg(rs.map((x) => x * x))) || 1, vals, sums, counts };
   return impModel;
+}
+/** What made a game better or worse than the player's usual: each number against the same champion and role
+ *  (or the role, with fewer than 10 other games), best first. */
+function improvementParts(h) {
+  const m = improvementModel(), gp = `p:${h.pair}`, gr = `r:${splitPair(h.pair).role}`;
+  const g = (m.counts[gp] || 0) - 1 >= 10 ? gp : (m.counts[gr] || 0) - 1 >= 10 ? gr : null;
+  if (!g) return { by: null, parts: [] };
+  const parts = Object.entries(m.vals.get(h.id) || {}).map(([k, v]) => { const s = m.sums[g][k]; if (!s || s[1] < 3) return null; const ref = (s[0] - v) / (s[1] - 1); return { m: MET[k], v, ref, z: ((v - ref) * MET[k].better) / MET[k].scale }; }).filter(Boolean).sort((a, b) => b.z - a.z);
+  return { by: g === gp ? pairLabel(h.pair) : `${ROLES[splitPair(h.pair).role]} games`, parts };
 }
 /** A ranked game's improvement over the player's usual, in games of progress. */
 const improvementOf = (h) => { const m = improvementModel(), r = m.raw.get(h.id); return r == null ? null : round1(clampU(r / m.sd)); };
@@ -2141,7 +2236,7 @@ function viewGame(id, matchId) {
     <p class="small muted">The tick is your usual ${pairLabel(pair)} over ${usualGames.length} other games.</p></section>
   ${t ? `<section class="rep-two">${teamsBlock(t, h)}${buildBlock(t)}</section>
   <details class="card tech allch"><summary><h3>More curves: gold, farm, damage</h3></summary><div class="curves">${['gold', 'cs', 'dmg'].map((k) => (t.cur[k]?.length ? lineChart(`rep-${h.id}-${k}`, k, series(k), t.deaths) : '')).join('')}</div></details>` : ''}
-  ${g?.results ? `<section class="card goldcard"><h3>Your 3 contest challenges · ${g.total} points</h3><div class="tablewrap"><table class="num"><tr><th>Pick</th><th>You</th><th>Line</th><th>Points</th></tr>${g.results.map((r) => `<tr><td>${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span></td><td>${fmt(r.id, r.value)}</td><td>${fmt(r.id, r.hi)}</td><td>${r.full ? `<b>${r.points}</b> made it` : r.frac > 0 ? `<b>${r.points}</b> (${Math.round(r.frac * 100)}% of the way)` : '0'}</td></tr>`).join('')}</table></div></section>` : ''}
+  ${g?.results ? `<section class="card goldcard"><h3>Your contest score · ${g.win ? 'win' : 'loss'} ${resultPts(g.win)} + 3 challenges = ${g.total} points</h3><div class="tablewrap"><table class="num"><tr><th>Pick</th><th>You</th><th>Line</th><th>Points</th></tr>${g.results.map((r) => `<tr><td>${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span></td><td>${fmt(r.id, r.value)}</td><td>${fmt(r.id, r.hi)}</td><td>${r.full ? `<b>${r.points}</b> made it` : r.frac > 0 ? `<b>${r.points}</b> (${Math.round(r.frac * 100)}% of the way)` : '0'}</td></tr>`).join('')}</table></div></section>` : ''}
   <details class="card tech allch"><summary><h3>Challenges, for contests <span class="small muted">· position ${Math.round(base.mean)} among ${tn} players · ${rows.length} challenges</span></h3></summary><div class="tablewrap"><table class="num"><tr><th>Challenge</th><th>You</th><th>Tier typical</th><th>Position</th><th>Your usual</th><th>Contest level</th></tr>
   ${rows.map((cid) => { const uv = usualOfCh(cid); return `<tr><td>${CH[cid].name}</td><td><b>${fmt(cid, base.v[cid])}</b></td><td class="muted">${fmt(cid, valueAt(pair, cid, base.win, 0.5, tier))}</td><td><span class="posbar"><i style="width:${base.pos[cid]}%"></i></span> ${base.pos[cid]}</td><td>${uv == null ? '<span class="muted">few games</span>' : Math.round(uv)}</td><td>${reach[cid] ? `<span class="tag ${reach[cid]}">${reach[cid]} ✓</span>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</table></div>
   <p class="small muted">Contest level: the highest level of each challenge this game would have made in a contest. ${rl('challenges')}${g?.imp ? ` Training contest score: ${signed(g.imp.total)}.` : ''}</p></details>
@@ -2209,7 +2304,7 @@ function viewJoin(ticket) {
     <p class="small muted">${challengeText(d.pair, c.id, chosen ? chosen.level : LEVELS.find((l) => offers[c.id][LEVELS.indexOf(l)] != null), tier)}</p>
     <div class="levels">${LEVELS.map((l, i) => { const t = r[`${d.pair}#${c.id}#${l}`]; const off = offers[c.id][i] == null; return `<button class="lv ${chosen && chosen.level === l ? 'on' : ''}" data-ch="${c.id}" data-lv="${l}" ${off ? 'disabled title="Not offered for this champion and role at this level"' : ''}><b>${l} · ${POINTS[l]}</b>${off ? 'not offered' : `${lineText(d.pair, c.id, l, tier)}<span class="you">${t ? (t.n < 5 ? `you ${pct(t.hits / t.n)} · few data` : `you ${pct(t.hits / t.n)}`) : 'no games yet'}</span>`}</button>`; }).join('')}</div></div>`;
   }).join('')}</div>
-  <div class="card lockbar gold"><div class="row between"><div><b>③ ${pairLabel(d.pair)}</b> · ${d.picks.length ? d.picks.map((p) => `${CH[p.id].name} ${LV[p.level]}`).join(' · ') : 'pick 3 challenges'} · up to ${pts} pts
+  <div class="card lockbar gold"><div class="row between"><div><b>③ ${pairLabel(d.pair)}</b> · ${d.picks.length ? d.picks.map((p) => `${CH[p.id].name} ${LV[p.level]}`).join(' · ') : 'pick 3 challenges'} · up to ${pts} challenge points, plus ${RESULT_PTS.win} for a win or ${RESULT_PTS.loss} for a loss
   <div class="small muted">Ticket ${euro(ticket)} · <b>nothing is charged now</b>: the ticket is taken when your game enters a contest. First game with this champion and role after locking · no changes after locking · unlocking takes 1 hour. ${rl('signups')}</div>
   ${ticket > S.balance ? `<div class="small l">Your balance (${euro2(S.balance)}) does not cover this ticket.</div>` : ''}</div>
   <button class="btn" id="lock" ${d.picks.length === 3 && ticket <= S.balance ? '' : 'disabled'}>Enter the contest</button></div></div>`;
@@ -2266,7 +2361,7 @@ function viewContest(id) {
     const sep = z !== lastZone ? `<tr class="sep z-${z}"><td colspan="5"><span>${ZONE[z]}</span></td></tr>` : '';
     lastZone = z;
     const k = `${id}:${i}`;
-    const res = e.results.map((r) => `<span class="res ${r.full ? 'ok' : r.frac > 0 ? 'part' : 'no'}" title="${CH[r.id].name} ${r.level}: ${fmt(r.id, r.value)} for ${fmt(r.id, r.hi)}">${r.full ? '✓' : r.frac > 0 ? '◐' : '✗'} ${CH[r.id].name} ${LV[r.level]}</span>`).join('');
+    const res = `<span class="res ${e.win ? 'ok' : 'no'}">${e.win ? 'Win' : 'Loss'} ${resultPts(e.win)}</span>` + e.results.map((r) => `<span class="res ${r.full ? 'ok' : r.frac > 0 ? 'part' : 'no'}" title="${CH[r.id].name} ${r.level}: ${fmt(r.id, r.value)} for ${fmt(r.id, r.hi)}">${r.full ? '✓' : r.frac > 0 ? '◐' : '✗'} ${CH[r.id].name} ${LV[r.level]}</span>`).join('');
     return `${sep}<tr class="${e.you ? 'you' : ''} z-${z}" data-row="${k}"><td><span class="place">${e._tie ? '=' : ''}${e._place}</span></td>
     <td><div class="row nowrap">${icon(splitPair(e.pair).champ)}<div><b>${esc(e.name)}</b>${e.you ? ' <span class="tag gold">you</span>' : ''}<div class="small muted">${tierName(e.tier)} · ${pairLabel(e.pair)}</div></div></div></td>
     <td class="chs">${res}</td><td class="pts"><b class="kpi">${e.total}</b></td><td class="prize">${e._prize ? euro2(e._prize) : '<span class="muted">—</span>'}</td></tr>
