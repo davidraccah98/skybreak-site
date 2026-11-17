@@ -1662,6 +1662,28 @@
     .rules .toc a { margin-left: -1px; padding: 7px 14px; border: 0; border-left: 2px solid transparent; border-radius: 0; background: none; white-space: normal; }
     .rules .toc a:hover, .rules .toc a.on { border-left-color: var(--accent); }
   }
+
+  /* the steps of Join: a number in a ring, never a font glyph */
+  h2.step { display: flex; align-items: center; gap: 12px; }
+  h2.step > i, .stepper i, i.stepn { display: inline-grid; place-items: center; flex: none; border: 1px solid var(--accent); border-radius: 50%; color: var(--accent); font: normal 700 13px/1 var(--f-text); font-variant-numeric: tabular-nums; }
+  h2.step > i { width: 30px; height: 30px; font-size: 15px; }
+  .stepper span { display: inline-flex; align-items: center; gap: 6px; } .stepper i { width: 18px; height: 18px; font-size: 10px; border-color: currentColor; color: inherit; }
+  i.stepn { width: 20px; height: 20px; margin-right: 8px; vertical-align: -4px; font-size: 11px; }
+
+  /* the public pages (what Riot sees first): the same logo and the same dawn sky as inside the app */
+  .logo i { width: 30px; height: 19px; background: linear-gradient(135deg, var(--accent-hot), var(--accent) 48%, #3172bf); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 38%, transparent); clip-path: polygon(0 76%, 26% 40%, 36% 60%, 57% 0, 70% 48%, 100% 24%, 72% 92%, 58% 60%, 39% 100%, 27% 73%); border-radius: 0; }
+  body[data-area="public"] .logo { font-size: 14px; gap: 10px; letter-spacing: .22em; }
+  body[data-area="public"] { --route-art: url("assets/art-home.webp"); --route-art-position: 80% 45%; }
+  body[data-area="public"][data-route] main { position: relative; isolation: isolate; padding-top: var(--sky-pad); }
+  body[data-area="public"][data-route] main::before { content: ""; position: absolute; z-index: 0; top: 0; left: calc(50% - 50vw); width: 100vw; height: var(--sky-h); pointer-events: none;
+    background-image: linear-gradient(90deg, rgba(3,8,22,.84) 0%, rgba(3,8,22,.5) 36%, rgba(3,8,22,0) 64%), linear-gradient(180deg, rgba(3,8,22,0) 38%, var(--bg) 98%), var(--route-art);
+    background-size: cover; background-position: var(--route-art-position); background-repeat: no-repeat; }
+  body[data-area="public"][data-route] main > * { position: relative; z-index: 1; }
+  .entry-head { padding-top: 0; max-width: min(760px, 70%); text-shadow: 0 4px 28px rgba(0,0,0,.72); }
+  .entry-head h1 { margin: 0; font-size: clamp(46px, 5.2vw, 76px); }
+  .entry-head .eyebrow { margin-bottom: 10px; letter-spacing: .18em; }
+  @media (max-width: 899px) { .entry-head { max-width: none; } }
+  @media (max-width: 640px) { .entry-head h1 { font-size: clamp(40px, 12vw, 54px); } }
 </style>
 </head>
 <body data-area="public">
