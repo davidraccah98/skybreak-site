@@ -1684,6 +1684,49 @@
   .entry-head .eyebrow { margin-bottom: 10px; letter-spacing: .18em; }
   @media (max-width: 899px) { .entry-head { max-width: none; } }
   @media (max-width: 640px) { .entry-head h1 { font-size: clamp(40px, 12vw, 54px); } }
+
+  /* ---------- one head height (17 November 2026): the content starts at the same place on every page ----------
+     The head is a zone of fixed height under the sky: the title sits at its top, and what follows always starts
+     --overlap pixels before the sky ends, covering its foot a little, as Home did. A longer line does not move it. */
+  :root { --overlap: 48px; --head-zone: clamp(160px, 12vw, 176px); --sky-pad: calc(var(--sky-h) - var(--overlap) - var(--s5) - var(--head-zone)); }
+  @media (max-width: 899px) { :root { --sky-h: 310px; --overlap: 40px; --head-zone: 160px; } }
+  @media (max-width: 520px) { :root { --sky-h: 300px; --overlap: 36px; --head-zone: 160px; } }
+  body:not([data-area="public"]) .route-title, body:not([data-area="public"]) .player-sky, main > .hello:not(.contest-head), main > header.rep-head, .entry-head { min-height: var(--head-zone); margin-bottom: var(--s5); box-sizing: border-box; }
+  body:not([data-area="public"]) .route-title { justify-content: flex-start; }
+  body:not([data-area="public"]) .player-sky { align-items: flex-start; align-content: flex-start; }
+  main > .hello:not(.contest-head) { align-items: flex-start; align-content: flex-start; }
+  main > header.rep-head { align-items: flex-start; }
+  body:not([data-area="public"]) .hc-hero > .route-title { margin-bottom: calc(var(--s5) - 18px); }
+  body:not([data-area="public"]) .route-title.acct-title { align-items: flex-start; }
+  .entry-head { padding-bottom: 0; }
+
+  /* ---------- the review path for Riot: optional, a small bar that never covers the page ---------- */
+  .entry-ways { gap: 10px; }
+  .tour { position: fixed; z-index: 30; right: 20px; bottom: 20px; width: min(380px, calc(100vw - 40px)); display: grid; gap: 6px; padding: 12px 14px 14px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: var(--r3); background: color-mix(in srgb, var(--panel) 96%, transparent); box-shadow: 0 18px 50px rgba(0,0,0,.55), inset 3px 0 0 var(--accent); backdrop-filter: blur(12px); }
+  .tour-top { display: flex; align-items: center; gap: 10px; }
+  .tour-top .eyebrow { margin: 0; }
+  .tour-dots { display: inline-flex; gap: 4px; margin-left: auto; }
+  .tour-dots i { width: 14px; height: 3px; border-radius: 2px; background: var(--line2); } .tour-dots i.done { background: color-mix(in srgb, var(--accent) 45%, transparent); } .tour-dots i.on { background: var(--accent); }
+  .tour-ic { flex: none; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line2); border-radius: var(--r2); background: none; color: var(--soft); font-size: 15px; line-height: 1; }
+  .tour-ic:hover { color: var(--ink); border-color: var(--accent); }
+  .tour-title { font: italic 700 20px/1.1 var(--f-head); text-transform: uppercase; letter-spacing: .01em; }
+  .tour-text { margin: 0; color: var(--soft); font-size: 13px; line-height: 1.5; }
+  .tour-act { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .tour.fold .tour-title, .tour.fold .tour-text, .tour.fold [data-tour="prev"], .tour.fold [data-tour="here"] { display: none; }
+  .tour.fold .tour-act { margin-top: 0; }
+  .tour.fold { gap: 8px; }
+  body[data-tour] main, body[data-tour] footer { padding-bottom: 260px; }
+  body[data-tour="fold"] main, body[data-tour="fold"] footer { padding-bottom: 140px; }
+  @media (max-width: 899px) {
+    .tour { left: 8px; right: 8px; width: auto; bottom: calc(70px + env(safe-area-inset-bottom)); padding: 10px 12px 12px; }
+    .tour-title { font-size: 17px; } .tour-text { font-size: 12.5px; }
+    .tour-dots { display: none; } .tour-top .eyebrow { margin-right: auto; white-space: nowrap; }
+    .tour-act { flex-wrap: nowrap; } .tour-act .btn.small { font-size: 10.5px; letter-spacing: .05em; }
+    .tour-act .btn.small { padding: 7px 10px; }
+    body[data-tour] main, body[data-tour] footer { padding-bottom: calc(330px + env(safe-area-inset-bottom)); }
+    body[data-tour="fold"] main, body[data-tour="fold"] footer { padding-bottom: calc(200px + env(safe-area-inset-bottom)); }
+    body[data-tour] .toast { bottom: calc(250px + env(safe-area-inset-bottom)); }
+  }
 </style>
 </head>
 <body data-area="public">

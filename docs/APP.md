@@ -449,17 +449,25 @@ Come si guadagnano e cosa comprano si decide dopo.
 
 ## 11. Guida per il revisore Riot
 
-Un pannello laterale chiudibile con 7 passi, ognuno sulla schermata vera:
+**Deciso il 17 novembre 2026: percorso facoltativo.** Il revisore sceglie se seguire la guida o esplorare da solo. Non c'è un tour obbligato.
 
-1. Account e Riot Sign On.
-2. Iscrizione al training, check e report.
-3. Intelligence.
-4. Contest di miglioramento, cioè il livello gratuito.
-5. Verifica, wallet e Join.
-6. Un contest finito, con premi e pareggi.
-7. Regole, fair play e cosa è simulato.
+- **Pagina d'ingresso:** due pulsanti, "Follow the review path · 6 stops, about 3 minutes" (il principale) ed "Explore on your own".
+- **La barra del percorso:** sta in basso a destra; sul telefono e sul tablet sta sopra la barra di navigazione. Non copre la pagina. Ogni tappa ha:
+  - il numero della tappa;
+  - un titolo;
+  - una frase su cosa guardare;
+  - i pulsanti ← Back e "Next: …".
 
-Si può uscire in qualsiasi momento.
+  Si può rimpicciolire (▾) o chiudere (×). Se il revisore va su un'altra pagina, compare "Back to stop N". "Overview for Riot", nella riga demo, riporta sempre alla pagina d'ingresso.
+- **Le 6 tappe, sulle schermate vere:**
+  1. Home: partite lette a fine gioco, niente durante la partita.
+  2. Il report di una partita in Training: confronto con il proprio tier, niente MMR.
+  3. Intelligence.
+  4. Il training contest gratuito: punti solo guadagnati.
+  5. I contest a premi: il ticket per partecipare, i premi ai primi 14, gli ultimi 6 non vincono niente.
+  6. Un contest finito: la classifica, solo Riot ID, cosa è simulato.
+
+  L'ultima tappa porta alle Regole.
 
 ## 12. Il mockup
 

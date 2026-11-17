@@ -612,10 +612,10 @@ function enterDemo(to) {
   location.hash = to;
 }
 function viewSignin() {
-  const back = PRIZE_ROWS.filter(([, x]) => x > 1).slice(0, 4).map(([n, x]) => `<span><b>${n}</b> ×${x}</span>`).join('') + '<span>… down to <b>14th</b> ×0.73</span>';
+  const back = `<span>${TICKETS.map((t) => `<b>${CONTEST_NAME[t]}</b>`).join(' · ')}</span><span>prizes for the first 14 of 20</span><span><b>the last 6 win nothing and lose their ticket</b></span>`;
   app.innerHTML = `<div class="entry"><div class="entry-head"><p class="eyebrow">Skybreak demo</p><h1>Built with respect for the game</h1>
   <p class="entry-note">I've played League since I was 15, and Skybreak is built out of respect for that game. We followed Riot's developer policies from the first design; if anything here doesn't fit, tell us and we'll change it. <span class="muted">— the founder</span></p>
-  <div class="row"><button class="btn" data-enter="#/home">${S.profile == null ? 'Start as Er Zebbor' : 'Continue as Er Zebbor'}</button><span class="small muted">Er Zebbor's EUW games and the thresholds are real; other players, time and money are simulated.</span></div></div>
+  <div class="row entry-ways"><button class="btn" data-tour="start">Follow the review path · 6 stops, about 3 minutes</button><button class="btn ghost" data-enter="#/home">${S.profile == null ? 'Explore on your own' : 'Continue on your own'}</button><span class="small muted">Er Zebbor's EUW games and the thresholds are real; other players, time and money are simulated.</span></div></div>
   <h2>The areas</h2><div class="areas">${AREAS.map(([k, name, img, text]) => `<article class="area"><button class="shot" data-enter="${k}" aria-label="Open ${name}"><img src="assets/${img}" alt="${name} screen" loading="lazy"></button>
   <div class="area-text"><h3>${name}</h3><p class="small">${text}</p>${k === '#/contests' ? `<div class="back">${back}</div>` : ''}<button class="more" data-enter="${k}">Open ${name} ›</button></div></article>`).join('')}</div>
   <h2>How we treat the data</h2><div class="card entry-data">${dataList()}
@@ -2458,7 +2458,7 @@ const RULES = [
   ['two', 'The two contests', `<div class="tablewrap"><table><tr><th></th><th>Training contest</th><th>Prize contest</th></tr>
   <tr><td>What you choose</td><td>Nothing: your next solo queue game, any champion</td><td>A champion, a role and 3 challenges</td></tr>
   <tr><td>How you are judged</td><td>Against your own usual game with that champion and role, and against the other 19</td><td>On the 3 challenges, with thresholds for your rank</td></tr>
-  <tr><td>What you win</td><td>Progress points: merch, coaching, team try-outs, real tournaments</td><td>Up to twice the ticket (the top 8 more than it), and progress points</td></tr>
+  <tr><td>What you win</td><td>Progress points: merch, coaching, team try-outs, real tournaments</td><td>Prizes for the first 14 of 20 (${TICKETS.map((t) => `${CONTEST_NAME[t]} ${euro(t * PRIZE_X.reduce((a, x) => a + x, 0))}`).join(', ')} in all) and progress points; the last 6 win nothing</td></tr>
   <tr><td>Cost</td><td>Free</td><td>A ticket (2, 5 or 10 €)</td></tr></table></div>
   <p><b>Training contest.</b> ${EXPLAIN.training}</p><p><b>Prize contest.</b> ${EXPLAIN.prize}</p>`],
   ['signups', 'Entries and checks', `<p>The same for training and for prize contests.</p><ul><li><b>Entry:</b> you enter your next game before playing it. In prize contests you also choose the champion, the role and the 3 challenges with their levels. After entering nothing changes.</li>
@@ -2487,6 +2487,44 @@ function viewRules(sec) {
 }
 
 // ---------- router ----------
+/** The review path for Riot: optional, six stops on the real screens. A bar that never covers the page;
+ *  Back, Next and close at every stop, and the reviewer can wander off and come back to the stop. */
+const TOUR = [
+  { to: () => '#/home', name: 'Home', title: 'A player\'s own games, read after they end',
+    text: 'Everything comes from finished ranked solo games, read through the official API. Nothing runs during a game: no overlay, no pop-ups.' },
+  { to: () => { const g = S.games.filter((x) => x.analysed).slice(-1)[0]; return g ? `#/train/game/${g.id}` : '#/train'; }, name: 'Training', title: 'One game against the average of the same rank tier',
+    text: 'Each game is compared with the player\'s usual one and with the average player of the same tier on the same champion. Rank tier only: no MMR and no player rating.' },
+  { to: () => '#/intel', name: 'Intelligence', title: 'The numbers of every champion',
+    text: 'Builds, matchups and tier lists by role and rank tier, from public ranked games. To study the game; nothing here is advice for a contest.' },
+  { to: () => '#/contests/training', name: 'Training contest', title: 'Free: 20 players, each in their own game',
+    text: 'Nobody plays together. Whoever improves most on their own usual game earns progress points for coaching, merch and try-outs. Points are earned only, never bought.' },
+  { to: () => '#/contests/prize', name: 'Prize contests', title: 'A ticket to compete, prizes apart',
+    text: 'Rising, Pro and Elite: prizes for the first 14 of 20, judged on thresholds for each player\'s own tier. The last 6 win nothing and lose their ticket. Verified accounts only; play money in this demo.' },
+  { to: () => { const c = Object.values(S.contests).filter((x) => x.kind !== 'imp' && x.state === 'done' && x.entries.some((e) => e.you)).sort((a, b) => b.closedAt - a.closedAt)[0]; return c ? `#/contest/${c.id}` : '#/mine/finished'; }, name: 'A finished contest', title: 'The final ranking',
+    text: 'Score: the result of the game plus its three challenges. Other players see only the Riot ID. Players, time and money are simulated in the demo; the games and thresholds are real.' },
+];
+function tourBar() {
+  let el = $('#tour');
+  if (S.tour == null || S.profile == null) { if (el) el.remove(); document.body.removeAttribute('data-tour'); return; }
+  const i = Math.max(0, Math.min(TOUR.length - 1, S.tour)), st = TOUR[i], last = i === TOUR.length - 1;
+  const path = (h) => h.split('?')[0];
+  const here = path(location.hash) === path(st.to());
+  if (!el) { el = document.createElement('aside'); el.id = 'tour'; el.className = 'tour'; el.setAttribute('aria-label', 'Review path'); document.body.appendChild(el); }
+  document.body.dataset.tour = S.tourFold ? 'fold' : 'on';
+  el.classList.toggle('fold', !!S.tourFold);
+  el.innerHTML = `<div class="tour-top"><span class="eyebrow">Review path · ${i + 1} of ${TOUR.length}</span><span class="tour-dots" aria-hidden="true">${TOUR.map((_, k) => `<i class="${k === i ? 'on' : k < i ? 'done' : ''}"></i>`).join('')}</span>
+    <button type="button" class="tour-ic" data-tour="fold" aria-label="${S.tourFold ? 'Show the stop' : 'Make it small'}" aria-expanded="${!S.tourFold}">${S.tourFold ? '▴' : '▾'}</button><button type="button" class="tour-ic" data-tour="close" aria-label="Close the review path">×</button></div>
+    <b class="tour-title">${st.title}</b><p class="tour-text">${st.text}</p>
+    <div class="tour-act">${i > 0 ? '<button type="button" class="btn ghost small" data-tour="prev">← Back</button>' : ''}${here ? '' : `<button type="button" class="btn ghost small" data-tour="here">Back to stop ${i + 1}</button>`}
+    <button type="button" class="btn small" data-tour="next">${last ? 'Read the rules →' : `Next: ${TOUR[i + 1].name} →`}</button></div>`;
+}
+function tourGo(i) {
+  if (i >= TOUR.length) { S.tour = null; save(); location.hash = '#/rules'; toast('Review path finished. Overview for Riot, at the top of every page, opens it again.'); return; }
+  if (S.profile == null) signIn(DEMO_PROFILE); // signing in starts the demo over, so the stop is set after it
+  S.tour = Math.max(0, i); S.tourFold = false; save();
+  const to = TOUR[S.tour].to();
+  if (location.hash === to) { render(); scrollTo(0, 0); } else location.hash = to;
+}
 function render() {
   const h = location.hash || '#/';
   const m = h.match(/^#\/(\w+)(?:\/(.*))?/);
@@ -2519,8 +2557,20 @@ function render() {
   else if (route === 'rules') viewRules(arg);
   else { location.hash = S.profile == null ? '#/signin' : '#/home'; return; }
   chrome(route);
+  tourBar();
 }
 document.addEventListener('click', (e) => {
+  const tb = e.target.closest('[data-tour]');
+  if (tb) {
+    const a = tb.dataset.tour, i = S.tour ?? 0;
+    if (a === 'start') tourGo(0);
+    else if (a === 'next') tourGo(i + 1);
+    else if (a === 'prev') tourGo(i - 1);
+    else if (a === 'here') tourGo(i);
+    else if (a === 'fold') { S.tourFold = !S.tourFold; save(); tourBar(); }
+    else if (a === 'close') { S.tour = null; save(); tourBar(); toast('Review path closed. Overview for Riot, at the top of every page, opens it again.'); }
+    return;
+  }
   const c = e.target.closest('[data-check]');
   if (c && S.profile != null) {
     const n = runCheck({ endOfDay: c.dataset.check === 'day' });
