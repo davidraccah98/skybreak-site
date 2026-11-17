@@ -1555,10 +1555,117 @@
   }
   @media (max-width: 760px) { .player-sky { flex-direction: row; align-items: flex-end; padding: 0; } .player-sky .player-rank { padding: 0 0 0 14px; } }
   @media (max-width: 520px) { .route-title, .train-head, .player-sky { max-width: none; } }
+  /* ---------- harmony, 17 November 2026: one sky, one page head, one type scale, one summoner badge, one bottom bar ----------
+     Every page of the app opens the same way at every width: the sky of its area, an eyebrow, the page name, one line.
+     These rules come last on purpose: they settle what the earlier layers left different from page to page. */
+  body { overflow-x: clip; }
+  :root { --sky-h: clamp(300px, 30vw, 430px); --sky-pad: clamp(168px, 17vw, 248px); --veil: 3,8,22; }
+  body[data-area="contest"] { --veil: 2,4,10; }
+  /* the sky of each page: Home's dawn for the personal pages without their own, the night for the contest area */
+  body[data-area="personal"] { --route-art: url("assets/art-home.webp"); --route-art-position: 80% 45%; }
+  body[data-route="intel"] { --route-art: url("assets/art-intel.webp"); --route-art-position: 80% 45%; }
+  body[data-route="train"] { --route-art: url("assets/art-train.webp"); --route-art-position: 78% 45%; }
+  body[data-area="contest"] { --route-art: url("assets/art-contests.webp"); --route-art-position: 76% 40%; }
+  body[data-route="rules"] { --route-art: url("assets/art-rules.webp"); --route-art-position: 70% 38%; }
+  body:not([data-area="public"])[data-route] main { position: relative; isolation: isolate; padding-top: var(--sky-pad); min-height: calc(var(--sky-h) + 80px); }
+  body:not([data-area="public"])[data-route] main::before { content: ""; position: absolute; z-index: 0; top: 0; left: 0; right: auto; width: 100%; height: var(--sky-h); pointer-events: none; border: 0;
+    background-image: linear-gradient(90deg, rgba(var(--veil),.84) 0%, rgba(var(--veil),.5) 36%, rgba(var(--veil),0) 64%), linear-gradient(180deg, rgba(var(--veil),0) 38%, var(--bg) 98%), var(--route-art);
+    background-size: cover; background-position: var(--route-art-position); background-repeat: no-repeat; }
+  body[data-area="contest"] main::before { filter: saturate(.8) brightness(.88); }
+  body:not([data-area="public"])[data-route] main > * { position: relative; z-index: 1; }
+  @media (min-width: 900px) { body:not([data-area="public"])[data-route] main::before { width: calc(100vw - 236px); } }
+  @media (max-width: 899px) { :root { --sky-h: 290px; --sky-pad: 148px; } body:not([data-area="public"])[data-route] main::before { background-image: linear-gradient(90deg, rgba(var(--veil),.8) 0%, rgba(var(--veil),.4) 55%, rgba(var(--veil),.05) 85%), linear-gradient(180deg, rgba(var(--veil),0) 36%, var(--bg) 98%), var(--route-art); } }
+  @media (max-width: 520px) { :root { --sky-h: 260px; --sky-pad: 128px; } }
+
+  /* the page head: eyebrow, the name, one line (Home: the badge and your Riot ID) */
+  body:not([data-area="public"]) .route-title, body:not([data-area="public"]) .player-sky { margin: 0 0 var(--s5); min-height: 0; text-shadow: 0 4px 28px rgba(0,0,0,.72); }
+  body:not([data-area="public"]) .route-title { display: flex; flex-direction: column; justify-content: flex-end; max-width: min(720px, 62%); }
+  .route-title .eyebrow, .player-sky .player-id .eyebrow { margin: 0 0 10px; font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
+  .route-title h1, .player-id h1, body[data-route="train"] main .route-title h1 { margin: 0; display: block; font: italic 800 clamp(46px, 5.2vw, 76px)/.92 var(--f-head); text-transform: uppercase; letter-spacing: .005em; overflow-wrap: anywhere; }
+  .route-title > p:not(.eyebrow), .route-title > div > p:not(.eyebrow), .player-meta { margin: 12px 0 0; max-width: 620px; color: rgba(244,248,255,.86); font-size: 15px; line-height: 1.5; }
+  body:not([data-area="public"]) .route-title.acct-title { flex-direction: row; align-items: center; gap: 22px; max-width: none; }
+  .route-title.acct-title > div { min-width: 0; }
+  .player-id { gap: 22px; align-items: center; }
+  /* the titles under the page head: detail pages, sections, blocks */
+  body:not([data-area="public"])[data-route] main h1:not(.route-title h1):not(.player-id h1) { font-size: clamp(34px, 3.4vw, 50px); }
+  body:not([data-area="public"])[data-route] main h2:not(.h), body:not([data-area="public"]) .panel-head h2, body:not([data-area="public"]) .current-form h2 { font-size: clamp(24px, 2.4vw, 32px); line-height: 1; }
+  body:not([data-area="public"]) .hcontests.home .hc-title h2 { font-size: clamp(34px, 4.2vw, 56px); line-height: .92; }
+  /* a back link sits above the page head without moving it: every title starts at the same height */
+  main > p.back { margin: -36px 0 17px; line-height: 19px; }
+  main > p.back a { color: var(--soft); text-decoration: none; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; text-shadow: 0 2px 12px rgba(0,0,0,.7); }
+  main > p.back a:hover { color: var(--accent); }
+  body:not([data-area="public"])[data-route] main .narrow { max-width: 760px; margin: 0; }
+  @media (max-width: 899px) { body:not([data-area="public"]) .route-title { max-width: 78%; } }
+  @media (max-width: 640px) {
+    body:not([data-area="public"]) .route-title { max-width: none; }
+    .route-title h1, .player-id h1, body[data-route="train"] main .route-title h1 { font-size: clamp(40px, 12vw, 54px); }
+    body:not([data-area="public"])[data-route] main h1:not(.route-title h1):not(.player-id h1) { font-size: 32px; }
+    .route-title > p:not(.eyebrow), .route-title > div > p:not(.eyebrow), .player-meta { font-size: 14px; }
+    body:not([data-area="public"]) .route-title.acct-title { gap: 16px; }
+    .player-id h1 { font-size: clamp(30px, 9vw, 40px); }
+    .player-id { gap: 16px; }
+  }
+
+  /* the summoner badge: the account icon in a ring, the level under it; the same in the side bar, on Home, in Account */
+  .sb { --sz: 40px; position: relative; display: inline-block; flex: none; width: var(--sz); height: var(--sz); text-shadow: none; }
+  .sb img, .sb.none b { display: block; width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--dawn); object-fit: cover; background: var(--panel2); box-shadow: 0 0 0 3px rgba(3,8,22,.55), 0 8px 24px rgba(0,0,0,.35); }
+  .sb.none b { display: grid; place-items: center; font: 700 calc(var(--sz) * .42)/1 var(--f-head); color: var(--dawn); }
+  .sb i { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 45%); min-width: 26px; padding: 2px 6px; border-radius: 999px; background: #0a0f1d; border: 1px solid var(--dawn); color: var(--dawn); font: normal 700 10px/1.1 var(--f-text); text-align: center; letter-spacing: .02em; white-space: nowrap; }
+  .sb.sm { --sz: 34px; } .sb.sm i { min-width: 0; padding: 1px 4px; font-size: 9px; }
+  .sb.lg { --sz: 84px; } .sb.lg i { padding: 2px 9px; font-size: 12px; }
+  @media (max-width: 640px) { .sb.lg { --sz: 64px; } .sb.lg i { font-size: 11px; padding: 1px 7px; } }
+  details.me summary { padding-bottom: 6px; }
+
+  /* the side bar takes the colour of the page's own sky */
+  @media (min-width: 900px) {
+    body:not([data-area="public"]) header.top::before { background-image: linear-gradient(180deg, rgba(var(--veil),.45) 0%, rgba(var(--veil),.86) 40%, rgba(var(--veil),.97) 78%), var(--route-art); background-size: auto 100%; background-position: 16% center; opacity: .9; }
+  }
+
+  /* the bottom bar on phones and tablets: five equal places, the icon over the name, a short bar over the open one */
+  @media (max-width: 899px) {
+    /* a blur on the header would make the fixed bar stick to the header instead of the screen (tablets, 761-899 px) */
+    body:not([data-area="public"]) header.top { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg); overflow: visible; }
+    body:not([data-area="public"]) .areanav:not(.pub) { grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 95%, transparent); border-top: 1px solid var(--line2); box-shadow: 0 -12px 32px rgba(0,0,0,.38); }
+    body:not([data-area="public"]) .areanav:not(.pub) a { position: relative; min-height: 52px; justify-content: center; gap: 4px; padding: 6px 2px; border: 0; border-radius: var(--r2); background: none; color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .01em; text-transform: none; }
+    body:not([data-area="public"]) .areanav:not(.pub) a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    body:not([data-area="public"]) .areanav:not(.pub) a::after { content: ""; position: absolute; top: -4px; left: 50%; width: 26px; height: 2px; border-radius: 2px; transform: translateX(-50%); background: transparent; }
+    body:not([data-area="public"]) .areanav:not(.pub) a.on { color: var(--ink); background: none; border: 0; }
+    body:not([data-area="public"]) .areanav:not(.pub) a.on::after { background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+    body:not([data-area="public"]) .areanav:not(.pub) a.on .nav-icon { color: var(--accent); }
+    body:not([data-area="public"]) .nav-icon { width: 22px; height: 22px; }
+    body:not([data-area="public"])[data-route] main, body:not([data-area="public"]) footer { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+    .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  }
+  /* the demo line: one line on a phone */
+  .demo-bar .db-short { display: none; }
+  @media (max-width: 700px) {
+    .demo-bar { flex-wrap: nowrap; justify-content: space-between; gap: 10px; padding: 6px 12px; text-align: left; }
+    .demo-bar .db-long { display: none; } .demo-bar .db-short { display: inline; }
+    .demo-bar a { flex: none; }
+  }
+
+  /* Rules: the same head, the index beside the text on a wide screen, one scrolling row on a phone */
+  .rules { max-width: 1160px; }
+  .rules-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+  .rules .toc { display: flex; flex-wrap: nowrap; gap: 6px; margin: 0; padding: 2px 0 8px; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  .rules .toc::-webkit-scrollbar { display: none; }
+  .rules .toc a { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border: 1px solid var(--line2); border-radius: 999px; background: color-mix(in srgb, var(--panel) 80%, transparent); color: var(--soft); font-size: 13px; text-decoration: none; }
+  .rules .toc a span { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rules .toc a:hover, .rules .toc a.on { color: var(--ink); border-color: var(--accent); }
+  .rules-text section { padding: var(--s5) 0 var(--s3); border-top: 1px solid var(--line); scroll-margin-top: 24px; }
+  .rules-text section:first-child { border-top: 0; padding-top: var(--s2); }
+  .rules-text section h2 { margin: 0 0 var(--s3); }
+  .rules section.hl { box-shadow: none; } .rules section.hl h2 { color: var(--accent); }
+  @media (min-width: 1100px) {
+    .rules-body { grid-template-columns: 230px minmax(0, 780px); gap: 48px; align-items: start; }
+    .rules .toc { position: sticky; top: 24px; flex-direction: column; gap: 0; padding: 0; overflow: visible; mask-image: none; border-left: 1px solid var(--line); }
+    .rules .toc a { margin-left: -1px; padding: 7px 14px; border: 0; border-left: 2px solid transparent; border-radius: 0; background: none; white-space: normal; }
+    .rules .toc a:hover, .rules .toc a.on { border-left-color: var(--accent); }
+  }
 </style>
 </head>
 <body data-area="public">
-  <div class="demo-bar"><span><b>Demo</b> · Er Zebbor data and Skybreak thresholds are real (<span id="games-n"></span> games) · players, time and money are simulated.</span><a href="#/signin">Overview for Riot</a></div>
+  <div class="demo-bar"><span><b>Demo</b><span class="db-long"> · Er Zebbor data and Skybreak thresholds are real (<span id="games-n"></span> games) · players, time and money are simulated.</span><span class="db-short"> · real data, simulated money</span></span><a href="#/signin">Overview for Riot</a></div>
   <header class="top" id="top"></header>
   <main id="app"></main>
   <footer>

@@ -487,6 +487,11 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.remove(), 4600);
 }
+/** The account's summoner icon with its level under it, the same everywhere (side bar, Home, Account). */
+function summoner(p = P(), size = '') {
+  if (p.icon == null) return `<span class="sb ${size} none" aria-hidden="true"><b>${esc(p.name[0])}</b></span>`;
+  return `<span class="sb ${size}" title="Summoner level ${p.level}"><img alt="" src="https://ddragon.leagueoflegends.com/cdn/${D.ddragon}/img/profileicon/${p.icon}.png"><i>${p.level}</i></span>`;
+}
 const PERSONAL = ['home', 'intel', 'train'];
 const CONTEST = ['contests', 'join', 'mine', 'contest', 'wallet', 'verify'];
 const PUBLIC = ['signin', 'signup', 'link'];
@@ -521,12 +526,11 @@ function chrome(route) {
     <div class="right"><a class="btn small" href="#/signin">Sign in</a></div>`;
   } else {
     const nav = [['#/home', 'Home', 'home'], ['#/intel', 'Intelligence', 'intel'], ['#/train', 'Training', 'train'], ['#/contests', 'Contests', 'contests'], ['#/rules', 'Rules', 'rules']];
-    const ini = P().name[0];
     html = `<a class="logo" href="#/home"><i></i>Skybreak</a>
     <nav class="areanav" aria-label="Main navigation">${nav.map(link).join('')}</nav>
     <div class="right"><button class="btn small" data-check="manual" title="Look for your new games now">Check<span class="hide-s"> my games</span></button>
     ${a === 'contest' ? `<a class="pill" href="#/wallet" title="Your balance">${euro2(S.balance)}</a>` : ''}
-    <details class="me"><summary aria-label="Account menu"><span class="av">${esc(ini)}</span><span class="account-brief"><b>${esc(P().name.split('#')[0])}</b><small>${tierName(P().tier)} · EUW</small></span></summary><div class="menu"><div class="who"><b>${esc(P().name)}</b><span>${tierName(P().tier)} · EUW · ${S.verified ? 'Verified' : 'Base'}</span></div>
+    <details class="me"><summary aria-label="Account menu">${summoner(P(), 'sm')}<span class="account-brief"><b>${esc(P().name.split('#')[0])}</b><small>${tierName(P().tier)} · EUW</small></span></summary><div class="menu"><div class="who"><b>${esc(P().name)}</b><span>${tierName(P().tier)} · EUW · ${S.verified ? 'Verified' : 'Base'}</span></div>
     <a href="#/account">Account</a><a href="#/rules">Rules</a><a href="#/support">Support</a><button type="button" data-signout>Sign out</button></div></details></div>`;
   }
   $('#top').innerHTML = `<div class="top-in">${html}</div>`;
@@ -781,7 +785,10 @@ function contestsBlock(mode = 'area') {
   const open = Object.values(S.contests).filter((c) => c.state === 'open');
   const nextR = REWARDS.find((r) => r[2] > bal);
   const paid = PRIZE_X.filter((x) => x > 0).length, nothing = SEATS - paid, pool = PRIZE_X.reduce((a, x) => a + x, 0);
-  const title = `<div class="hc-title"><p class="eyebrow">Contests · solo queue</p><h2>Prove yourself.<br><span>Show your value.</span></h2>
+  const title = mode === 'home'
+    ? `<div class="hc-title"><p class="eyebrow">Contests · solo queue</p><h2>Prove yourself.<br><span>Show your value.</span></h2>
+      <p>20 players, each in their own solo queue game. One entry, two ways to win.</p></div>`
+    : `<div class="route-title"><p class="eyebrow">Prove yourself · show your value</p><h1>Contests</h1>
       <p>20 players, each in their own solo queue game. One entry, two ways to win.</p></div>`;
   if (mode === 'home') return `<section class="hcontests home" aria-label="Contests">
     <header class="hc-hero">${title}
@@ -894,8 +901,8 @@ function nowCard(c) {
 function viewTrainingArea() {
   const again = () => { if ((location.hash || '') === '#/contests/training') { const y = scrollY; viewTrainingArea(); scrollTo(0, y); } };
   withTraining(again); withStats(again); syncContests();
-  app.innerHTML = `<p><a href="#/contests">← Contests</a></p>
-  <header class="carea-head solo"><p class="eyebrow">Free · 20 players</p><h1>Training contest</h1><p>Your progress, the rewards it opens, and every training contest you played.</p></header>
+  app.innerHTML = `<p class="back"><a href="#/contests">← Contests</a></p>
+  <header class="route-title"><p class="eyebrow">Free · 20 players</p><h1>Training contest</h1><p>Your progress, the rewards it opens, and every training contest you played.</p></header>
   ${progressPanel()}
   <section class="carea"><h2>Your training contests</h2>${myTrainingContests()}${S.signups.some((x) => x.kind === 'training' && !active(x)) ? '<p class="small"><a href="#/contests/signups">Past entries →</a></p>' : ''}</section>`;
 }
@@ -919,9 +926,7 @@ function viewHome() {
   const { champs } = sliderChamps();
   const sentences = homeSentences(all, champs);
   const today = sentences.length ? sentences[Math.floor(Date.now() / DAY) % sentences.length] : null;
-  const avatar = p.icon != null
-    ? `<div class="player-avatar acct"><img alt="" src="https://ddragon.leagueoflegends.com/cdn/${D.ddragon}/img/profileicon/${p.icon}.png"><span class="lvl">${p.level}</span></div>`
-    : `<div class="player-avatar">${champs[0] ? icon(champs[0], '') : esc(p.name[0])}</div>`;
+  const avatar = summoner(p, 'lg');
   app.innerHTML = `<section class="player-sky home-sky"><div class="player-id">${avatar}<div><p class="eyebrow">Welcome back</p><h1>${esc(p.name)}</h1><p class="player-meta">EUW · ${p.role} main</p></div></div>
     ${today ? `<div class="home-today" style="--splash:url('https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${today.c}_0.jpg')"><p class="eyebrow">${today.tag}</p><strong>${today.say}</strong><p>${today.more}</p>${today.train ? `<a class="btn" href="#/train" data-trainchamp="${today.train}">${today.cta}</a>` : today.lock ? `<button class="btn" data-lock="${today.lock}">${today.cta}</button>` : `<a class="btn" href="${today.go}">${today.cta}</a>`}</div>` : ''}
     <div class="sky-fracture" aria-hidden="true"></div></section>
@@ -2103,7 +2108,7 @@ function lockPair(pair) {
 }
 function viewPastSignups() {
   const ended = S.signups.filter((s) => s.kind === 'training' && !active(s)).reverse();
-  app.innerHTML = `<p><a href="#/contests/training">← Contests</a></p><h1>Past entries</h1>${ended.length ? `<div class="list">${ended.map(signupRow).join('')}</div>` : '<p class="muted">None yet.</p>'}`;
+  app.innerHTML = `<p class="back"><a href="#/contests/training">← Training contest</a></p><div class="route-title"><p class="eyebrow">Training contest</p><h1>Past entries</h1></div>${ended.length ? `<div class="list">${ended.map(signupRow).join('')}</div>` : '<p class="muted">None yet.</p>'}`;
 }
 // ---------- the game report ----------
 const CURVE_KINDS = [['gold', 'Gold', (v) => v.toLocaleString('en-GB')], ['cs', 'Farm (CS)', (v) => String(v)], ['dmg', 'Damage to champions', (v) => v.toLocaleString('en-GB')], ['diff', 'Gold gap to your lane opponent', (v) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toLocaleString('en-GB')}`]];
@@ -2194,7 +2199,7 @@ function viewGame(id, matchId) {
   const base = g || { ...h, kind: 'ranked', note: 'Not signed up: it counts for your history, not for contests.' };
   const pair = base.pair, { champ } = splitPair(pair), cn = champName(champ);
   const c = g?.contestId && findContest(g.contestId);
-  const headHtml = `<p><a href="#/train">← Training</a></p><header class="rep-head">${icon(champ, 'champ lg')}<div><p class="eyebrow">${base.kind === 'contest' ? 'Prize contest game' : base.kind === 'training' ? 'Training contest game' : 'Ranked game'} · ${when(base.start)}</p><h1>${pairLabel(pair)} <span class="${base.win ? 'w' : 'l'}">${base.win ? 'Win' : 'Loss'}</span></h1>
+  const headHtml = `<p class="back"><a href="#/train">← Training</a></p><header class="rep-head">${icon(champ, 'champ lg')}<div><p class="eyebrow">${base.kind === 'contest' ? 'Prize contest game' : base.kind === 'training' ? 'Training contest game' : 'Ranked game'} · ${when(base.start)}</p><h1>${pairLabel(pair)} <span class="${base.win ? 'w' : 'l'}">${base.win ? 'Win' : 'Loss'}</span></h1>
   <p class="small muted">${Math.round(base.minutes)} min${h ? ` · ${h.k}/${h.d}/${h.a} · ${h.cs} CS` : ''}${h?.opp ? ` · against ${champName(h.opp)}` : ''} · ${esc(base.note)} ${c ? `<a href="${c.kind === 'imp' ? `#/contests/t/${c.id}` : `#/contest/${c.id}`}">Contest #${num(c.id)} ›</a>` : ''}</p></div></header>`;
   if (!ready) { app.innerHTML = `${headHtml}<p class="muted">${trainLoad === 'failed' || statsLoad === 'failed' ? 'Could not load the game data.' : 'Loading the game…'}</p>`; return; }
   const t = tlOf(h), a = tierAvg(pair);
@@ -2260,7 +2265,7 @@ function viewImpContest(id) {
   if (!c) { app.innerHTML = '<p>Contest not found. <a href="#/contests/training">Contests</a></p>'; return; }
   syncContests();
   const st = standing(c), rows = st.rows, cp = contestPoints(c, st.me);
-  app.innerHTML = `<p><a href="#/contests/training">← Contests</a></p><div class="hello"><div><p class="eyebrow">Free · 20 training games · any tier · earns points</p><h1>Training contest #${num(c.id)}</h1>
+  app.innerHTML = `<p class="back"><a href="#/contests/training">← Training contest</a></p><div class="hello"><div><p class="eyebrow">Free · 20 training games · any tier · earns points</p><h1>Training contest #${num(c.id)}</h1>
   <p class="sub">${c.state === 'open' ? `Open: ${c.entries.length} of ${SEATS} games, provisional.` : `Finished ${day(c.closedAt)}.`} Ranked by improvement: each game against its tier and against the player's own past games. Riot IDs only. <span class="muted">Demo numbers: the formula is not final.</span></p></div>
   <div class="counter"><b>${c.entries.length}</b><span>of ${SEATS}</span></div></div>
   <div class="standing"><strong>${ord(st.me._place)}</strong><span>${st.text} · your improvement <b>${signed(st.me.total)}</b>, contest average ${signed(cp.field)}: <b class="${cp.pts >= 0 ? 'up' : 'down'}">${signed(cp.pts)} progress</b>${c.state === 'open' ? ' <span class="muted">· one game per contest: your next training game enters another one</span>' : ''}</span></div>
@@ -2297,7 +2302,7 @@ function viewJoin(ticket) {
   const offers = offersOf(d.pair), r = rec();
   const pts = d.picks.reduce((a, x) => a + POINTS[x.level], 0);
   const slot = (i) => { const p = d.picks[i]; return `<div class="slot ${p ? 'full' : ''}"><span class="n">${i + 1}</span>${p ? `<b>${CH[p.id].name}</b> <span class="tag ${p.level}">${p.level}</span> <button class="x" data-rm="${i}" aria-label="Remove">×</button>` : '<span class="muted">empty</span>'}</div>`; };
-  app.innerHTML = `<p><a href="#/contests">← Contests</a></p><div class="hello"><div><p class="eyebrow">Prize contest · 20 players</p><h1>${cName(ticket)}</h1><p class="join-sub">Ticket ${euro(ticket)} · ${euro(ticket * PRIZE_X.reduce((a, x) => a + x, 0))} in prizes for the first 14 places · <b>the last 6 win nothing and lose their ticket.</b></p><div class="chips join-tix">${TICKETS.map((t) => `<a class="chip ${t === ticket ? 'on' : ''}" href="#/join/${t}">${CONTEST_NAME[t]} · ${euro(t)}</a>`).join('')}</div></div><div class="stepper"><span class="${d.pair ? 'on' : ''}">① Pair</span><span class="${d.picks.length ? 'on' : ''}">② Challenges</span><span class="${d.picks.length === 3 ? 'on' : ''}">③ Enter</span></div></div>
+  app.innerHTML = `<p class="back"><a href="#/contests">← Contests</a></p><div class="hello"><div><p class="eyebrow">Prize contest · 20 players</p><h1>${cName(ticket)}</h1><p class="join-sub">Ticket ${euro(ticket)} · ${euro(ticket * PRIZE_X.reduce((a, x) => a + x, 0))} in prizes for the first 14 places · <b>the last 6 win nothing and lose their ticket.</b></p><div class="chips join-tix">${TICKETS.map((t) => `<a class="chip ${t === ticket ? 'on' : ''}" href="#/join/${t}">${CONTEST_NAME[t]} · ${euro(t)}</a>`).join('')}</div></div><div class="stepper"><span class="${d.pair ? 'on' : ''}">① Pair</span><span class="${d.picks.length ? 'on' : ''}">② Challenges</span><span class="${d.picks.length === 3 ? 'on' : ''}">③ Enter</span></div></div>
   <h2>① Pair</h2><section class="card">${pp.html}</section>
   <h2 id="step2">② Three challenges for ${pairLabel(d.pair)}</h2><div class="slots">${[0, 1, 2].map(slot).join('')}</div>
   <p class="small muted">Thresholds for a ${tierName(tier)} player. Under each level: how often your signed-up games made it. ${rl('challenges')}</p>
@@ -2346,7 +2351,7 @@ function viewMine(tab) {
     const l = mineC.filter((c) => c.state === 'done').sort((a, b) => b.closedAt - a.closedAt);
     body = l.length ? `<div class="list">${l.map((c) => { const me = c.entries.find((e) => e.you); return `<a class="item link" href="#/contest/${c.id}"><div class="row nowrap"><div class="grow"><b>${cName(c.ticket)} #${num(c.id)}</b><div class="small muted">${day(c.closedAt)} · ${me.total} pts</div></div><span class="big">${ord(me.place)}</span><span class="${me.prize ? 'w' : 'muted'}">${me.prize ? `won ${euro2(me.prize)}` : 'no prize'}</span></div></a>`; }).join('')}</div>` : '<p class="muted">No finished contest yet.</p>';
   }
-  app.innerHTML = `<h1>My contests</h1>${tabs([['#/mine', 'Waiting', 'waiting'], ['#/mine/progress', 'In progress', 'progress'], ['#/mine/finished', 'Finished', 'finished']], t)}${body}`;
+  app.innerHTML = `<p class="back"><a href="#/contests">← Contests</a></p><div class="route-title"><p class="eyebrow">Contest area</p><h1>My contests</h1><p>The games you entered, the contests in progress and the finished ones.</p></div>${tabs([['#/mine', 'Waiting', 'waiting'], ['#/mine/progress', 'In progress', 'progress'], ['#/mine/finished', 'Finished', 'finished']], t)}${body}`;
 }
 const openRows = new Set();
 function viewContest(id) {
@@ -2370,7 +2375,7 @@ function viewContest(id) {
     <td class="chs">${res}</td><td class="pts"><b class="kpi">${e.total}</b></td>${c.state === 'done' ? `<td class="prize">${e._prize ? euro2(e._prize) : '<span class="muted">—</span>'}</td>` : ''}</tr>
     ${openRows.has(k) ? `<tr class="detail"><td></td><td colspan="4">${e.results.map((r) => `<div class="small">${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span> ${fmt(r.id, r.value)} for a line of ${fmt(r.id, r.hi)} → <b>${r.points}</b> pts</div>`).join('')}</td></tr>` : ''}`;
   }).join('');
-  app.innerHTML = `<p><a href="#/contests">← Lobby</a></p><div class="hello contest-head ${c.state === 'done' ? 'is-finished' : ''}"><div><p class="eyebrow">Prize contest · 20 players · rules v1 ${rl('changes', '')}</p><h1>${cName(c.ticket)} #${num(c.id)}</h1>
+  app.innerHTML = `<p class="back"><a href="#/contests">← Contests</a></p><div class="hello contest-head ${c.state === 'done' ? 'is-finished' : ''}"><div><p class="eyebrow">Prize contest · 20 players · rules v1 ${rl('changes', '')}</p><h1>${cName(c.ticket)} #${num(c.id)}</h1>
   <p class="sub">${c.state === 'open' ? `<span class="tag wait">Open ${c.entries.length}/${SEATS}</span> Provisional: it changes as games come in.` : `<span class="tag ok">Finished</span> ${day(c.closedAt)}.${me ? (me.prize ? ` <b>${ord(me.place)} place: you won ${euro2(me.prize)}.</b> It is in your wallet.` : '') + (above ? ` ${Math.round((above.total - me.total) * 10) / 10} points to the place above.` : '') : ''}`} Riot IDs only; each player measured against their own tier. Tap a row for the values.</p></div>
   <div class="counter"><b>${c.entries.length}</b><span>of ${SEATS}</span></div></div>
   <table class="lb"><tr class="head"><th>#</th><th>Player</th><th>Challenges</th><th style="text-align:right">Pts</th>${c.state === 'done' ? '<th style="text-align:right">Won</th>' : ''}</tr>${html}</table>
@@ -2380,7 +2385,7 @@ function viewContest(id) {
 function viewWallet() {
   if (needAccount()) return;
   const KIND = { deposit: 'Deposit', ticket: 'Ticket', prize: 'Prize', refund: 'Refund', withdrawal: 'Withdrawal' };
-  app.innerHTML = `<p><a href="#/contests">← Lobby</a></p><p class="eyebrow">Contest area</p><h1>Wallet</h1><p class="sub">Demo: play money. In the real product deposits and withdrawals go through a payment provider; bank details stay with them. ${rl('contests')}</p>
+  app.innerHTML = `<p class="back"><a href="#/contests">← Contests</a></p><div class="route-title"><p class="eyebrow">Contest area</p><h1>Wallet</h1><p>Demo: play money. In the real product deposits and withdrawals go through a payment provider; bank details stay with them. ${rl('contests')}</p></div>
   <div class="walletbar"><div><p class="eyebrow">Balance</p><div class="big">${euro2(S.balance)}</div></div><div class="row"><button class="btn ghost" data-deposit>Deposit</button><button class="btn ghost" data-withdraw>Withdraw</button></div></div>
   <h2>Movements</h2><div class="tablewrap"><table class="num"><tr><th>Date</th><th>Movement</th><th>Contest</th><th style="text-align:right">Amount</th></tr>
   ${S.ledger.slice().sort((a, b) => b.at - a.at).map((l) => `<tr><td>${day(l.at)} ${clock(l.at)}</td><td>${KIND[l.kind]}</td><td>${l.contestId ? `<a href="#/contest/${l.contestId}">#${num(l.contestId)}</a>` : '<span class="muted">—</span>'}</td><td style="text-align:right" class="${l.amount > 0 ? 'w' : ''}">${l.amount > 0 ? '+' : '−'}${euro2(Math.abs(l.amount))}</td></tr>`).join('')}</table></div>`;
@@ -2388,7 +2393,7 @@ function viewWallet() {
 function viewVerify() {
   if (needAccount()) return;
   const back = S.afterVerify || '#/contests';
-  app.innerHTML = `<div class="narrow"><p class="eyebrow">Contest area</p><h1>Verify your identity</h1><p class="sub">Prizes are real money: we need to know who you are. It is also needed to use points. No other player ever sees this data: in contests they see only your Riot ID. ${rl('accounts')}</p>
+  app.innerHTML = `<div class="narrow"><div class="route-title"><p class="eyebrow">Contest area</p><h1>Verify your identity</h1><p>Prizes are real money: we need to know who you are. It is also needed to use points. No other player ever sees this data: in contests they see only your Riot ID. ${rl('accounts')}</p></div>
   ${S.verified ? '<div class="note"><b>Verified.</b> Prize contests are open to you.</div>' : `<form class="card form" id="vf" novalidate>
     <div class="row"><div><label class="fld" for="fn">First name</label><input type="text" id="fn" autocomplete="given-name"></div><div><label class="fld" for="ln">Last name</label><input type="text" id="ln" autocomplete="family-name"></div></div>
     <div><label class="fld" for="dob">Date of birth</label><input type="date" id="dob" autocomplete="bday"></div>
@@ -2408,7 +2413,7 @@ function viewVerify() {
 function viewAccount() {
   if (needAccount()) return;
   const f = S.signupForm || {};
-  app.innerHTML = `<div class="narrow"><h1>Account</h1>
+  app.innerHTML = `<div class="narrow"><div class="route-title acct-title">${summoner(P(), 'lg')}<div><p class="eyebrow">Your account</p><h1>Account</h1><p>${esc(P().name)} · ${tierName(P().tier)} · EUW</p></div></div>
   <section class="card"><dl class="kv"><dt>Riot ID</dt><dd><b>${esc(P().name)}</b> · ${tierName(P().tier)} · EUW <span class="small muted">· can't be changed</span></dd>
   <dt>Account</dt><dd>${S.verified ? '<span class="tag ok">Verified</span>' : '<span class="tag">Base</span> <a class="btn small" href="#/verify">Verify</a>'}</dd>
   <dt>Email</dt><dd>${esc(f.email || 'demo@skybreak.gg')}</dd><dt>Language</dt><dd>${esc(f.language || 'English')}</dd><dt>News</dt><dd>${f.marketing ? 'Yes' : 'No'}</dd></dl></section>
@@ -2424,7 +2429,7 @@ function viewAccount() {
   $('#reset').onclick = () => { if (confirm('Reset the demo? Your simulated account, games and contests are deleted.')) wipe(); };
 }
 function viewSupport() {
-  app.innerHTML = `<div class="narrow"><h1>Support</h1><div class="card"><p>Questions about a game, a contest or your account: write to <a href="mailto:david@skybreak.gg">david@skybreak.gg</a>. Include your Riot ID and the contest number.</p><p class="small muted">The rules answer most questions: <a href="#/rules">Rules</a>.</p></div></div>`;
+  app.innerHTML = `<div class="narrow"><div class="route-title"><p class="eyebrow">Help</p><h1>Support</h1></div><div class="card"><p>Questions about a game, a contest or your account: write to <a href="mailto:david@skybreak.gg">david@skybreak.gg</a>. Include your Riot ID and the contest number.</p><p class="small muted">The rules answer most questions: <a href="#/rules">Rules</a>.</p></div></div>`;
 }
 /** How the numbers are made: the same words on the entry page and in the rules. */
 function dataList() {
@@ -2475,9 +2480,9 @@ const RULES = [
   ['open', 'Still open', '<ul><li>The maximum time of a contest that does not fill.</li><li>The hour of the end-of-day check and how many manual checks per day.</li><li>The final improvement formula.</li><li>How points are earned and what they pay for.</li></ul>'],
 ];
 function viewRules(sec) {
-  app.innerHTML = `<div class="rules"><h1>Rules</h1><p class="sub">The same for everyone, public before you sign up, changed only with notice.</p>
-  <nav class="toc" aria-label="Sections">${RULES.map(([id, n], i) => `<a href="#/rules/${id}">${i < RULES.length - 1 ? `${i + 1}. ` : ''}${n}</a>`).join('')}</nav>
-  ${RULES.map(([id, n, body], i) => `<section id="r-${id}" class="${id === sec ? 'hl' : ''}"><h2>${i < RULES.length - 1 ? `${i + 1}. ` : ''}${n}</h2>${body}</section>`).join('')}</div>`;
+  app.innerHTML = `<div class="rules"><div class="route-title"><p class="eyebrow">The same for everyone</p><h1>Rules</h1><p>Public before you sign up, changed only with notice.</p></div>
+  <div class="rules-body"><nav class="toc" aria-label="Sections">${RULES.map(([id, n], i) => `<a href="#/rules/${id}" class="${id === sec ? 'on' : ''}">${i < RULES.length - 1 ? `<span>${i + 1}</span>` : '<span>·</span>'}${n}</a>`).join('')}</nav>
+  <div class="rules-text">${RULES.map(([id, n, body], i) => `<section id="r-${id}" class="${id === sec ? 'hl' : ''}"><h2>${i < RULES.length - 1 ? `${i + 1}. ` : ''}${n}</h2>${body}</section>`).join('')}</div></div></div>`;
   if (sec && document.getElementById(`r-${sec}`)) requestAnimationFrame(() => document.getElementById(`r-${sec}`).scrollIntoView({ block: 'start' }));
 }
 

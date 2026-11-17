@@ -440,6 +440,12 @@ Come si guadagnano e cosa comprano si decide dopo.
   - barra divergente, riga di classifica con zona premio;
   - badge di stato, stato vuoto, link alle regole.
 - **Accessibilità:** contrasto sufficiente, stati mai affidati al solo colore, tutto usabile da tastiera, testi di almeno 16 px sul telefono.
+- **Ogni pagina si apre allo stesso modo** (17 novembre 2026), a ogni larghezza:
+  - il cielo della sua area: Home, Intelligence, Training e Regole hanno il loro, l'area contest la notte, le altre pagine personali l'alba della Home;
+  - sopra c'è il titolo: occhiello, nome della pagina e una riga. Ha la stessa misura e la stessa altezza in ogni pagina, anche con il link "← indietro" sopra.
+- **Il badge evocatore:** icona dell'account in un anello, con il livello sotto. È lo stesso nella barra laterale, in Home e in Account.
+- **Telefono e tablet (sotto 900 px):** la barra in basso ha 5 posti uguali, icona sopra il nome, e una lineetta sopra la voce aperta. La riga demo sta su una riga.
+- **Regole:** su schermo largo l'indice sta di fianco al testo e resta fermo mentre scorri. Sul telefono è una riga che scorre in orizzontale.
 
 ## 11. Guida per il revisore Riot
 
