@@ -492,6 +492,8 @@ function summoner(p = P(), size = '') {
   if (p.icon == null) return `<span class="sb ${size} none" aria-hidden="true"><b>${esc(p.name[0])}</b></span>`;
   return `<span class="sb ${size}" title="Summoner level ${p.level}"><img alt="" src="https://ddragon.leagueoflegends.com/cdn/${D.ddragon}/img/profileicon/${p.icon}.png"><i>${p.level}</i></span>`;
 }
+/** The Skybreak logo: the bolt of light through the sky. The same file is assets/logo.svg; the colours never change with the area. */
+const LOGO = '<svg class="mark" viewBox="0 0 54 30" aria-hidden="true" focusable="false"><defs><linearGradient id="sb-sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b7ecff"/><stop offset=".48" stop-color="#5cc8ff"/><stop offset="1" stop-color="#3172bf"/></linearGradient></defs><polygon fill="url(#sb-sky)" points="0,22.8 14.04,12 19.44,18 30.78,0 37.8,14.4 54,7.2 38.88,27.6 31.32,18 21.06,30 14.58,21.9"/></svg>';
 const PERSONAL = ['home', 'intel', 'train'];
 const CONTEST = ['contests', 'join', 'mine', 'contest', 'wallet', 'verify'];
 const PUBLIC = ['signin', 'signup', 'link'];
@@ -522,11 +524,11 @@ function chrome(route) {
   const link = ([href, name, key]) => `<a href="${href}" class="${navActive(key, href) ? 'on' : ''}">${key ? icon(key) : ''}<span>${name}</span></a>`;
   let html;
   if (a === 'public') {
-    html = `<a class="logo" href="#/signin"><i></i>Skybreak</a><nav class="areanav pub">${[['#/rules', 'Rules']].map(link).join('')}</nav>
+    html = `<a class="logo" href="#/signin">${LOGO}Skybreak</a><nav class="areanav pub">${[['#/rules', 'Rules']].map(link).join('')}</nav>
     <div class="right"><a class="btn small" href="#/signin">Sign in</a></div>`;
   } else {
     const nav = [['#/home', 'Home', 'home'], ['#/intel', 'Intelligence', 'intel'], ['#/train', 'Training', 'train'], ['#/contests', 'Contests', 'contests'], ['#/rules', 'Rules', 'rules']];
-    html = `<a class="logo" href="#/home"><i></i>Skybreak</a>
+    html = `<a class="logo" href="#/home">${LOGO}Skybreak</a>
     <nav class="areanav" aria-label="Main navigation">${nav.map(link).join('')}</nav>
     <div class="right"><button class="btn small" data-check="manual" title="Look for your new games now">Check<span class="hide-s"> my games</span></button>
     ${a === 'contest' ? `<a class="pill" href="#/wallet" title="Your balance">${euro2(S.balance)}</a>` : ''}

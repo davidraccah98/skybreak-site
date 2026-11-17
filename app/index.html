@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Skybreak — Demo</title>
 <meta name="description" content="A working demo of Skybreak: a personal area to see where you beat your tier and train, and a contest area to compete for prizes.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0f1f'/%3E%3Cpath d='M16 30V9' stroke='%23ffd27a' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M5 12h7l4-6 4 6h7' fill='none' stroke='%23e8ecff' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700;1,800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1727,6 +1727,10 @@
     body[data-tour="fold"] main, body[data-tour="fold"] footer { padding-bottom: calc(200px + env(safe-area-inset-bottom)); }
     body[data-tour] .toast { bottom: calc(250px + env(safe-area-inset-bottom)); }
   }
+
+  /* ---------- the logo (17 November 2026): the bolt is the official mark, assets/logo.svg; one colour everywhere ---------- */
+  .logo .mark { display: block; flex: none; width: 32px; height: auto; aspect-ratio: 54 / 30; }
+  @media (min-width: 900px) { body:not([data-area="public"]) .logo .mark { width: 54px; } }
 </style>
 </head>
 <body data-area="public">

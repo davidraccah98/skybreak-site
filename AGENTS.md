@@ -34,6 +34,7 @@ Preview: `node serve.mjs`, then http://localhost:4180 and http://localhost:4180/
   - **technical** (tight grid, aligned numbers) for Intelligence, reports, tables, leaderboards.
   - Personal area: night blue with a sky-blue accent. Contest area: darker, gold accent. Colours change between areas, the structure does not.
 - Keep the design tokens in `:root` of `app/index.html` as the single source of colours, fonts, spacing and radii.
+- The logo is the bolt in `assets/logo.svg` (the favicon is `assets/favicon.svg`). Use it as it is, in its sky-blue colours in every area; do not redraw it or tint it.
 - Generated images go in `assets/` (landing) or `app/assets/` (demo), as `.webp` or `.svg`, compressed (aim under 300 KB each), with an empty `alt=""` when decorative. Name files by what they show (`hero-sky.webp`).
 - Mobile matters: check every page at 375 px wide; no horizontal scrolling; the bottom bar in the app must stay usable.
 - Accessibility: enough contrast, states never shown by colour alone, everything usable with the keyboard.

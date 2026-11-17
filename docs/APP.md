@@ -443,6 +443,7 @@ Come si guadagnano e cosa comprano si decide dopo.
 - **Ogni pagina si apre allo stesso modo** (17 novembre 2026), a ogni larghezza:
   - il cielo della sua area: Home, Intelligence, Training e Regole hanno il loro, l'area contest la notte, le altre pagine personali l'alba della Home;
   - sopra c'è il titolo: occhiello, nome della pagina e una riga. Ha la stessa misura e la stessa altezza in ogni pagina, anche con il link "← indietro" sopra.
+- **Il logo** (deciso il 17 novembre 2026): è il fulmine di luce nel cielo, file `assets/logo.svg`. L'icona del sito è `assets/favicon.svg`, lo stesso fulmine su un quadrato scuro. I colori sono sempre quelli azzurri, anche nell'area contest. In testata si usa lo stesso disegno, scritto nel codice.
 - **Il badge evocatore:** icona dell'account in un anello, con il livello sotto. È lo stesso nella barra laterale, in Home e in Account.
 - **Telefono e tablet (sotto 900 px):** la barra in basso ha 5 posti uguali, icona sopra il nome, e una lineetta sopra la voce aperta. La riga demo sta su una riga.
 - **Regole:** su schermo largo l'indice sta di fianco al testo e resta fermo mentre scorri. Sul telefono è una riga che scorre in orizzontale.
