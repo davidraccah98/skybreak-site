@@ -16,6 +16,8 @@ The public site of Skybreak (skybreak.gg), served by GitHub Pages from the repos
 
 Preview: `node serve.mjs`, then http://localhost:4180 and http://localhost:4180/app/. The demo keeps state in `localStorage`; Account › Reset the demo starts over.
 
+Checks: `node tests/check.mjs` (about two minutes, needs Chrome). Run it after every change and before asking to publish; it must end with "Everything passed" or with failures the owner already knows about. Rule wording is reviewed on the `revisione` branch; `main` is what skybreak.gg shows.
+
 ## Rules that are never broken
 
 - Nothing is shown during the game: no overlay, no pop-ups.
@@ -25,6 +27,7 @@ Preview: `node serve.mjs`, then http://localhost:4180 and http://localhost:4180/
 - Nothing that looks like gambling or betting: no casino, slot, odds or betting imagery or words ("bet", "odds", "jackpot", "stake"). The product is about the player's own performance against their own tier.
 - **No Riot Games logos, no League of Legends logos, no splash art or official artwork used as brand graphics, nothing that looks like an official Riot or LoL Esports event.** Champion icons from Data Dragon are allowed only where a champion is named (pickers, lists, leaderboards). The Riot disclaimer stays in the footer of every page.
 - Texts and numbers that come from data (thresholds, prizes, rules) are not changed by design work.
+- **One way to say each system.** Every page that explains a system (training contest, ticket, score, prizes, check, cancelling, progress points, thresholds…) uses its sentence from `TERMS` at the top of `app/app.js`, never its own wording. `TERMS` is the English twin of `docs/GLOSSARIO.md` in the main repo and of the Glossario tab of the rules document; the Rules page holds the full articles. A new or changed sentence changes in all three, and the old one goes in `tests/old-phrases.json`.
 
 ## How to work
 

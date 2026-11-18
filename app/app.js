@@ -28,6 +28,33 @@ const prizeTotal = (win, results) => Math.round((resultPts(win) + results.reduce
 const TICKETS = [200, 500, 1000];
 const CONTEST_NAME = { 200: 'Rising', 500: 'Pro', 1000: 'Elite' }; // decided 17 November 2026: a name, never "a 2 € contest"
 const cName = (t) => `${CONTEST_NAME[t]} contest`;
+/** The glossary: one way to say each system, used by every page that explains it, the rules' short form (version 1).
+ *  Change a sentence here, in docs/GLOSSARIO.md and in the rulebook together; never write a new variant on a page. */
+const TERMS = {
+  skybreak: 'Skybreak compares each of your ranked solo queue games with the average player of your rank tier, on the same champion and role.',
+  during: 'Nothing appears on your screen during a game: Skybreak reads games only after they end.',
+  intel: 'Intelligence shows your ranked games against your rank tier and the numbers of every champion by role and rank tier.',
+  training: 'Training analyses every ranked solo game you play, against your usual game and the average player of your rank tier on the same champion and role. Analysis only, for you alone.',
+  challenge: 'A challenge is a measurable goal in a game, offered for a champion and role only if it is fair and real.',
+  levels: `Easy, medium and hard: the average player of your rank tier makes them in about 6 games out of 10, 1 in 3 and 1 in 7. They are worth ${POINTS.easy}, ${POINTS.medium} and ${POINTS.hard} points.`,
+  threshold: 'The threshold of a level is the same for everyone with that champion, role and rank tier, computed on everyone\'s games, never on yours.',
+  window: 'Reach the threshold and you get all the points; from the threshold below up to it, the points grow in proportion; below it, none.',
+  entry: 'You enter your next game before playing it; after entering, nothing changes.',
+  check: 'A check reads your new games from Riot: once a day for everyone, and whenever you press Check my games.',
+  unplayed: 'An entry not played by the next day\'s check is cancelled.',
+  cancel: 'Cancelling runs a check first: a valid game found still counts; otherwise the entry is cancelled at once.',
+  trainingContest: `Training contest: free, ${SEATS} players, each in their own game. Whoever improves most on their usual game with that champion and role ranks highest.`,
+  points: 'Progress points are earned only by improving: never bought, never money. They open coaching, merch and team try-outs.',
+  prizeContest: `Prize contest: Rising, Pro or Elite, ${SEATS} players, each in their own game.`,
+  ownTier: 'Every player is judged on the thresholds of their own rank tier: an Iron and a Diamond compete on equal terms.',
+  ticket: 'The ticket is the price to take part, not a sure win. It is taken only when your game enters a contest.',
+  score: `The score is the result plus the 3 challenges: ${RESULT_PTS.win} for a win, ${RESULT_PTS.loss} for a loss, plus at most ${POINTS.hard * 3} from the challenges.`,
+  prizes: 'Prizes go to the first 14 places; the last 6 win nothing and lose their ticket.',
+  included: 'A prize contest game also enters a training contest, so it earns progress points too.',
+  riotId: 'In contests other players see only your Riot ID.',
+  data: 'Skybreak reads your Riot ID, region, rank tier and ranked solo games through Riot\'s official API, after you sign in with Riot.',
+  fairplay: 'Zero tolerance on contest fair play: no smurfs, no shared accounts, no duo; anyone found abusing is banned without notice, and the ban hits the person.',
+};
 const HOUR = 3600e3;
 const DAY = 24 * HOUR;
 const START_BALANCE = 2000;
@@ -284,8 +311,10 @@ function ranked(c) {
   while (i < rows.length) {
     let j = i;
     while (j + 1 < rows.length && rows[j + 1].total === rows[i].total) j++;
-    const sum = c.ticket ? PRIZE_X.slice(i, j + 1).reduce((a, x) => a + x * c.ticket, 0) : 0;
-    for (let k = i; k <= j; k++) { rows[k]._place = i + 1; rows[k]._tie = j > i; rows[k]._prize = Math.round(sum / (j - i + 1)); }
+    // tied players split the prizes of their places; a cent the split leaves over goes to whoever entered first,
+    // so a contest always pays out exactly its prizes, never a cent more or less
+    const sum = c.ticket ? Math.round(PRIZE_X.slice(i, j + 1).reduce((a, x) => a + x * c.ticket, 0)) : 0, n = j - i + 1, share = Math.floor(sum / n);
+    for (let k = i; k <= j; k++) { rows[k]._place = i + 1; rows[k]._tie = j > i; rows[k]._prize = share + (k - i < sum - share * n ? 1 : 0); }
     i = j + 1;
   }
   return rows;
@@ -474,8 +503,8 @@ function unlock(s) {
   const n = runCheck({ short: true });
   if (s.status === 'played') { toast(`The check found your game${n > 1 ? 's' : ''}: it entered the contest, so the cancellation does not apply.`); return; }
   if (rnd() < 0.15) { s.note = 'Cancellation refused: you were in a game at that moment. Try again when it ends.'; save(); toast('You are in a game right now: cancellation refused.'); return; }
-  Object.assign(s, { status: 'unlocking', unlockAsked: S.now, unlockAt: S.now + HOUR, note: `Cancellation requested at ${clock(S.now)}: it takes effect at ${clock(S.now + HOUR)} if no valid game started before the request.` });
-  save(); toast('Cancellation requested: it takes effect in 1 hour.');
+  Object.assign(s, { status: 'unlocked', unlockAsked: S.now, note: `Cancelled at ${clock(S.now)}: the check found no valid game.` });
+  save(); toast('Entry cancelled: the check found no valid game.');
 }
 
 // ---------- UI pieces ----------
@@ -549,12 +578,12 @@ const signLabel = (s) => (s.pair === '*' ? 'Your next ranked game' : pairLabel(s
 const signIcon = (s) => (s.pair === '*' ? '<span class="champ any" aria-hidden="true">★</span>' : icon(splitPair(s.pair).champ));
 function signupRow(s) {
   const what = s.kind === 'training' ? 'Training contest' : `${cName(s.ticket)} · ${picksHtml(s.picks)}`;
-  const act = s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="Takes effect in 1 hour, if no game started before">Cancel the entry</button>` : s.contestId ? `<a class="btn ghost small" href="${s.kind === 'training' ? `#/contests/t/${s.contestId}` : `#/contest/${s.contestId}`}">Contest #${num(s.contestId)}</a>` : '';
+  const act = s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="${TERMS.cancel}">Cancel the entry</button>` : s.contestId ? `<a class="btn ghost small" href="${s.kind === 'training' ? `#/contests/t/${s.contestId}` : `#/contest/${s.contestId}`}">Contest #${num(s.contestId)}</a>` : '';
   return `<div class="item"><div class="row nowrap">${signIcon(s)}<div class="grow"><b>${signLabel(s)}</b><div class="small muted">${what} · entered ${clock(s.at)}</div></div>${act}</div>
   <div class="row between" style="margin-top:6px">${statusTag(s)}${s.note ? `<span class="small muted grow" style="text-align:right">${esc(s.note)}</span>` : ''}</div></div>`;
 }
 function checkBar() {
-  return `<div class="checkbar"><div class="small muted">Last check ${when(S.lastCheck)}. At the end of the day the daily check runs and removes sign-ups not played. ${rl('signups')}</div>
+  return `<div class="checkbar"><div class="small muted">Last check ${when(S.lastCheck)}. ${TERMS.check} ${TERMS.unplayed} ${rl('signups')}</div>
   <div class="row"><button class="btn" data-check="manual">Check my games</button><button class="btn ghost" data-check="day">Skip to the end of the day</button></div></div>`;
 }
 function tabs(items, on) { return `<div class="tabs" role="tablist">${items.map(([href, name, k]) => `<a role="tab" href="${href}" class="${k === on ? 'on' : ''}" aria-selected="${k === on}">${name}</a>`).join('')}</div>`; }
@@ -603,9 +632,9 @@ function newDraft(kind, ticket) {
 // ---------- public: sign in, create account, link Riot ----------
 const AREAS = [
   ['#/home', 'Home', 'area-home.jpg', 'How much you improved lately, your mains, and your training match history.'],
-  ['#/intel', 'Intelligence', 'area-intel.jpg', 'All your ranked solo games, your mains against your tier, and every champion\'s numbers by role and tier.'],
-  ['#/train', 'Training', 'area-train.jpg', 'Where you see what is wrong in your own game: the champions you can improve, the lane phase and build of every game, and how you changed. Analysis only: the contests are in their own area.'],
-  ['#/contests', 'Contests', 'area-contests.jpg', 'The two contests on your own solo queue games, 20 players each: free training contests, where whoever improves most wins progress points, and prize contests with a ticket and 3 challenges. We don\'t create custom games, so we don\'t use the Tournament API.'],
+  ['#/intel', 'Intelligence', 'area-intel.jpg', TERMS.intel],
+  ['#/train', 'Training', 'area-train.jpg', `${TERMS.training} The champions you can improve, the lane phase and build of every game, and how you changed.`],
+  ['#/contests', 'Contests', 'area-contests.jpg', `${TERMS.trainingContest} ${TERMS.prizeContest} We don't create custom games, so we don't use the Tournament API.`],
   ['#/rules', 'Rules', 'area-rules.jpg', 'One page, linked from every screen: accounts, scoring, sign-ups, prizes, fair play and how we treat the data.'],
 ];
 /** Enter the demo as Er Zebbor on one screen (keeps the demo state if already in). */
@@ -705,8 +734,8 @@ function homeSentences(all, champs) {
 // ---------- the two contests, said the same way everywhere ----------
 // No images of speech: what you do, who you compete with, how you are judged, what you win.
 const EXPLAIN = {
-  training: 'You compete with 19 other players. You do not play together: each plays their own solo queue game, whenever they want. Each game is compared with the usual game of whoever played it: whoever improves most wins. You win progress points, for merch, coaching, team try-outs and real tournaments.',
-  prize: 'You buy a ticket: the chance to win, not a sure win. You choose a champion, a role and 3 challenges, and try to score as many points as you can. You compete with 19 other players: each plays their own solo queue game, whenever they want. The challenge thresholds depend on each player\'s rank. Three contests: Rising (2 € ticket), Pro (5 €) and Elite (10 €). The prizes go to the first 14 places; the last 6 win nothing and lose their ticket. The same game also enters a training contest, so you win progress points too.',
+  training: `${TERMS.trainingContest} Nobody plays together: each plays their own solo queue game, whenever they want. ${TERMS.points}`,
+  prize: `${TERMS.prizeContest} You choose a champion, a role and 3 challenges. ${TERMS.ticket} ${TERMS.ownTier} ${TERMS.score} ${TERMS.prizes} ${TERMS.included}`,
 };
 const STEPS = `<ol class="esteps"><li><b>1</b>Enter your next game</li><li><b>2</b>Play a solo queue game</li><li><b>3</b>See the ranking</li></ol>`;
 /** Where your training contests stand, as one instruction: enter, play, wait for the ranking, or see how it went. */
@@ -730,7 +759,7 @@ function trainingStep(pair = '*', { compact = false } = {}) {
     const s = st.s;
     return `<div class="estate entered">${strip}<p class="e-say"><b>✓ Entered.</b> Now open League of Legends and play ${s.pair === '*' ? 'a solo queue game' : `a solo queue game with ${pairLabel(s.pair)}`}.</p>
       <p class="small">Nothing else to do: after the game we read it from Riot. The entry lasts until tomorrow's check.${s.status === 'unlocking' ? ` Cancelling: it takes effect at ${clock(s.unlockAt)}.` : ''}</p>
-      <div class="e-act"><button class="btn small" data-check="manual">I played: check my games</button>${s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="Takes effect in 1 hour, if no game started before">Cancel the entry</button>` : ''}</div></div>`;
+      <div class="e-act"><button class="btn small" data-check="manual">I played: check my games</button>${s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="${TERMS.cancel}">Cancel the entry</button>` : ''}</div></div>`;
   }
   if (st.k === 'arrived') return `<div class="estate arrived">${strip}<p class="e-say"><b>Your game is in training contest #${num(st.c.id)}:</b> you are ${ord(st.place)} of ${st.c.entries.length} games in.</p>
       <p class="small">The ranking closes at ${SEATS} games. You can already enter your next game.</p><div class="e-act">${enterBtn()}<a class="btn ghost small" href="#/contests/t/${st.c.id}">See the ranking</a></div></div>`;
@@ -795,7 +824,7 @@ function contestsBlock(mode = 'area') {
   if (mode === 'home') return `<section class="hcontests home" aria-label="Contests">
     <header class="hc-hero">${title}
       <div class="hc-doors">
-        <a class="hc-door free" href="#/contests"><span>Training contest · free</span><b>Beat your own usual game</b><small>Win progress points for coaching, merch, team try-outs and real tournaments.</small><i>See how it works →</i></a>
+        <a class="hc-door free" href="#/contests"><span>Training contest · free</span><b>Beat your own usual game</b><small>${TERMS.points}</small><i>See how it works →</i></a>
         <a class="hc-door prize" href="#/contests"><span>Prize contest</span><b>Play for a prize against 19 players</b><small>Choose 3 challenges. Three contests: Rising, Pro and Elite.</small><i>See how it works →</i></a>
       </div></header></section>`;
   const tile = (cls, top, big, small, href) => `<${href ? `a href="${href}"` : 'div'} class="hc-tile ${cls}"><span>${top}</span><b>${big}</b><small>${small}</small></${href ? 'a' : 'div'}>`;
@@ -816,24 +845,24 @@ function contestsBlock(mode = 'area') {
   return `<section class="hcontests" aria-label="Contests">
     <header class="hc-hero">${title}
       <ol class="hc-how">
-        <li><b>1</b><div><strong>Enter your next game</strong><span>Before you play it. If games could be chosen afterwards, everyone would enter only their best one.</span></div></li>
+        <li><b>1</b><div><strong>Enter your next game</strong><span>${TERMS.entry}</span></div></li>
         <li><b>2</b><div><strong>Play a solo queue game</strong><span>As usual, whenever you want. Nobody plays together: each of the 20 plays their own game.</span></div></li>
         <li><b>3</b><div><strong>See the ranking</strong><span>After the game we read it from Riot. It joins a contest of 20, and the ranking compares the 20 games.</span></div></li>
       </ol></header>
     <div class="hc-two">
-      ${card('free', 'Training contest', 'Free', 'Beat your own usual game.', ['Your next game counts, with any champion.', 'It is compared with your usual game with that champion, and with how much the other 19 improved.'],
+      ${card('free', 'Training contest', 'Free', 'Beat your own usual game.', ['Your next game counts, with any champion.', TERMS.trainingContest],
         REWARDS.filter((r) => ['review', 'coaching', 'tryout'].includes(r[0])).map(([id, , cost]) => tile(bal >= cost ? 'ok' : '', `${cost} points`, REWARD_SHORT[id], { review: 'on one of your games', coaching: 'one hour, one to one', tryout: 'for a Skybreak team' }[id])),
-        'Points are earned only, never bought. They also open merch and entries to real tournaments.', trainFoot)}
-      ${card('prize', 'Prize contest', '', 'Play for a prize against 19 players.', ['Choose a champion, a role and 3 challenges, and try to score as many points as you can.', 'Every player is judged on thresholds for their own rank, so an Iron and a Diamond compete fairly.'],
+        TERMS.points, trainFoot)}
+      ${card('prize', 'Prize contest', '', 'Play for a prize against 19 players.', ['Choose a champion, a role and 3 challenges, and try to score as many points as you can.', TERMS.ownTier],
         TICKETS.map((t) => tile('', CONTEST_NAME[t], euro(t * pool), `in prizes · ticket ${euro(t)}`, `#/join/${t}`)),
         `<b class="hc-warn">You can lose your ticket. In every contest the last ${nothing} of the 20 win nothing.</b> The ticket lets you take part and compete for the prizes of the first ${SEATS - nothing} places: it is not a sure win. It includes a training contest, so you also earn progress points. <a href="#/rules/contests">The prizes, place by place →</a>`, prizeFoot)}
     </div>
     ${myContestsNow()}
     <ul class="hc-promise">
       <li><b>Solo queue only</b><span>Normal, flex and ARAM games never count.</span></li>
-      <li><b>Nothing to gain by losing</b><span>Every challenge is set to be as reachable in a win as in a loss: no challenge pays you to throw a game.</span></li>
+      <li><b>Nothing to gain by losing</b><span>Every challenge is set to be as reachable in a win as in a loss: no challenge rewards you for throwing a game.</span></li>
       <li><b>Nothing on screen</b><span>No overlay and no alerts during the game. You just play.</span></li>
-      <li><b>Zero tolerance</b><span>No smurfs, no shared accounts. Bans are on the person, not the game account.</span></li>
+      <li><b>Zero tolerance</b><span>${TERMS.fairplay}</span></li>
     </ul>
   </section>`;
 }
@@ -846,7 +875,7 @@ function myContestsNow() {
   const doneOf = (k, n) => mineC.filter((c) => c.state === 'done' && (c.kind === 'imp') === k).sort((x, y) => myAt(y) - myAt(x)).slice(0, n);
   const openC = mineC.filter((c) => c.state === 'open'), doneC = [...doneOf(false, 2), ...doneOf(true, 1)].sort((x, y) => myAt(y) - myAt(x));
   const rows = [
-    ...waiting.map((s) => `<div class="cn-row"><span class="cn-kind ${s.kind === 'training' ? 'free' : 'prize'}">${s.kind === 'training' ? 'Training' : CONTEST_NAME[s.ticket]}</span><span class="cn-what"><b>${signLabel(s)}</b><small>${s.status === 'unlocking' ? `cancelling at ${clock(s.unlockAt)}` : `entered ${clock(s.at)} · waiting for your game`}</small></span>${s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="Takes effect in 1 hour, if no game started before">Cancel</button>` : ''}</div>`),
+    ...waiting.map((s) => `<div class="cn-row"><span class="cn-kind ${s.kind === 'training' ? 'free' : 'prize'}">${s.kind === 'training' ? 'Training' : CONTEST_NAME[s.ticket]}</span><span class="cn-what"><b>${signLabel(s)}</b><small>${s.status === 'unlocking' ? `cancelling at ${clock(s.unlockAt)}` : `entered ${clock(s.at)} · waiting for your game`}</small></span>${s.status === 'waiting' ? `<button class="btn ghost small" data-unlock="${s.id}" title="${TERMS.cancel}">Cancel</button>` : ''}</div>`),
     ...openC.sort((x, y) => (x.kind === 'imp') - (y.kind === 'imp')).map(nowCard),
     ...(doneC.length ? [`<p class="cn-sep">Finished</p>`, ...doneC.map(nowCard)] : []),
   ];
@@ -916,7 +945,7 @@ function myTrainingContests() {
   return `<div class="list">${mine.map((c) => { const me = ranked(c).find((e) => e.you), pts = contestPoints(c, c.entries.filter((e) => e.you).sort((a, b) => b.at - a.at)[0]).pts;
     return `<a class="item link" href="#/contests/t/${c.id}"><div class="row nowrap">${icon(splitPair(me.pair).champ)}<div class="grow"><b>Training contest #${num(c.id)}</b><div class="small muted">${c.state === 'open' ? `open · ${c.entries.length} of ${SEATS} games` : `finished ${day(c.closedAt)}`}</div></div><span class="small muted">you</span><span class="big">${ord(me._place)}</span><span class="tc-pts ${pts > 0 ? 'up' : pts < 0 ? 'down' : ''}">${pts >= 0 ? '+' : '−'}${Math.abs(pts).toFixed(1)}</span></div></a>`; }).join('')}</div>`;
 }
-const trainNudge = () => contestNudge('Put your improvement to the test', 'Enter your next game in a free training contest: 20 players, and progress points for coaching, merch and team try-outs.');
+const trainNudge = () => contestNudge('Put your improvement to the test', `Enter your next game in a free training contest. ${TERMS.trainingContest}`);
 /** A button, in Training and Intelligence, that sends to the contests. */
 const contestNudge = (title, text, to = '#/contests/training', cta = 'Contests →') => `<a class="cnudge" href="${to}"><span class="cn-art" aria-hidden="true"></span><span class="cn-text"><b>${title}</b><small>${text}</small></span><i>${cta}</i></a>`;
 function viewHome() {
@@ -1653,7 +1682,7 @@ function pickAct() {
   const pair = `${trainRole}|${trainChamp}`;
   return `<div class="pick-act"><div class="chips">${roles.map((r) => `<button class="chip ${r === trainRole ? 'on' : ''}" data-trole="${r}">${ROLES[r]}</button>`).join('')}</div>
       </div>
-    <p class="pick-help">Every ranked game is analysed against your usual and against the average player of your tier with the same champion.</p>`;
+    <p class="pick-help">${TERMS.training}</p>`;
 }
 // ---------- LP ----------
 const lpOf = (net) => net * LP_PER_GAME;
@@ -1889,7 +1918,7 @@ function contestPoints(c, e) {
   const field = others.length ? avg(others.map((x) => x.total)) : 0;
   return { pts: round1(clampU(0.5 * e.total + 0.5 * (e.total - field))), field: round1(field) };
 }
-const REWARDS = [['review', 'A coach reviews one of your games', 5], ['merch', 'Skybreak merch', 8], ['coaching', 'One hour of coaching', 12], ['tournament', 'An entry to a real tournament', 20], ['tryout', 'A try-out for a Skybreak team', 30]];
+const REWARDS = [['review', 'A coach reviews one of your games', 5], ['merch', 'Skybreak merch', 8], ['coaching', 'One hour of coaching', 12], ['tryout', 'A try-out for a Skybreak team', 30]];
 /** The bar over time: every contest game moves it, rewards spend it; it never goes below zero. */
 function progressLedger() {
   const steps = [];
@@ -1900,7 +1929,7 @@ function progressLedger() {
   for (const s of steps) { bal = Math.max(0, bal + (s.spend ? -s.spend.cost : s.pts)); s.bal = round1(bal); }
   return { bal: round1(bal), steps };
 }
-const REWARD_SHORT = { review: 'Coach review', merch: 'Merch', coaching: 'Coaching', tournament: 'Real tournament', tryout: 'Team try-out' };
+const REWARD_SHORT = { review: 'Coach review', merch: 'Merch', coaching: 'Coaching', tryout: 'Team try-out' };
 /** Training's first section: on the left the one thing to do now, on the right the progress it earns, as a road of rewards. */
 function progressPanel() {
   const { bal, steps } = progressLedger(), games = steps.filter((s) => !s.spend);
@@ -2268,7 +2297,7 @@ function viewImpContest(id) {
   syncContests();
   const st = standing(c), rows = st.rows, cp = contestPoints(c, st.me);
   app.innerHTML = `<p class="back"><a href="#/contests/training">← Training contest</a></p><div class="hello"><div><p class="eyebrow">Free · 20 training games · any tier · earns points</p><h1>Training contest #${num(c.id)}</h1>
-  <p class="sub">${c.state === 'open' ? `Open: ${c.entries.length} of ${SEATS} games, provisional.` : `Finished ${day(c.closedAt)}.`} Ranked by improvement: each game against its tier and against the player's own past games. Riot IDs only. <span class="muted">Demo numbers: the formula is not final.</span></p></div>
+  <p class="sub">${c.state === 'open' ? `Open: ${c.entries.length} of ${SEATS} games, provisional.` : `Finished ${day(c.closedAt)}.`} Ranked by improvement: each game against the usual game of whoever played it, with that champion and role. Riot IDs only. <span class="muted">Demo numbers: the formula is not final.</span></p></div>
   <div class="counter"><b>${c.entries.length}</b><span>of ${SEATS}</span></div></div>
   <div class="standing"><strong>${ord(st.me._place)}</strong><span>${st.text} · your improvement <b>${signed(st.me.total)}</b>, contest average ${signed(cp.field)}: <b class="${cp.pts >= 0 ? 'up' : 'down'}">${signed(cp.pts)} progress</b>${c.state === 'open' ? ' <span class="muted">· one game per contest: your next training game enters another one</span>' : ''}</span></div>
   <table class="lb"><tr class="head"><th>#</th><th>Player</th><th style="text-align:right">Improvement</th></tr>
@@ -2307,7 +2336,7 @@ function viewJoin(ticket) {
   app.innerHTML = `<p class="back"><a href="#/contests">← Contests</a></p><div class="hello"><div><p class="eyebrow">Prize contest · 20 players</p><h1>${cName(ticket)}</h1><p class="join-sub">Ticket ${euro(ticket)} · ${euro(ticket * PRIZE_X.reduce((a, x) => a + x, 0))} in prizes for the first 14 places · <b>the last 6 win nothing and lose their ticket.</b></p><div class="chips join-tix">${TICKETS.map((t) => `<a class="chip ${t === ticket ? 'on' : ''}" href="#/join/${t}">${CONTEST_NAME[t]} · ${euro(t)}</a>`).join('')}</div></div><div class="stepper"><span class="${d.pair ? 'on' : ''}"><i>1</i>Champion</span><span class="${d.picks.length ? 'on' : ''}"><i>2</i>Challenges</span><span class="${d.picks.length === 3 ? 'on' : ''}"><i>3</i>Enter</span></div></div>
   <h2 class="step"><i>1</i>Champion and role</h2><section class="card">${pp.html}</section>
   <h2 id="step2" class="step"><i>2</i>Three challenges for ${pairLabel(d.pair)}</h2><div class="slots">${[0, 1, 2].map(slot).join('')}</div>
-  <p class="small muted">Thresholds for ${/^[AEIOU]/.test(tierName(tier)) ? 'an' : 'a'} ${tierName(tier)} player. Under each level: how often your signed-up games made it. ${rl('challenges')}</p>
+  <p class="small muted">Thresholds for ${/^[AEIOU]/.test(tierName(tier)) ? 'an' : 'a'} ${tierName(tier)} player. ${TERMS.levels} ${TERMS.window} Under each level: how often your entered games made it. ${rl('challenges')}</p>
   <div class="grid chgrid">${D.challenges.filter((c) => offers[c.id]).map((c) => {
     const chosen = d.picks.find((x) => x.id === c.id);
     return `<div class="ch ${chosen ? 'on' : ''}"><div class="row between"><h3>${c.name}</h3><span class="tag">${c.family}</span></div>
@@ -2315,7 +2344,7 @@ function viewJoin(ticket) {
     <div class="levels">${LEVELS.map((l, i) => { const t = r[`${d.pair}#${c.id}#${l}`]; const off = offers[c.id][i] == null; return `<button class="lv ${chosen && chosen.level === l ? 'on' : ''}" data-ch="${c.id}" data-lv="${l}" ${off ? 'disabled title="Not offered for this champion and role at this level"' : ''}><b>${l} · ${POINTS[l]}</b>${off ? 'not offered' : `${lineText(d.pair, c.id, l, tier)}<span class="you">${t ? (t.n < 5 ? `you ${pct(t.hits / t.n)} · few data` : `you ${pct(t.hits / t.n)}`) : 'no games yet'}</span>`}</button>`; }).join('')}</div></div>`;
   }).join('')}</div>
   <div class="card lockbar gold"><div class="row between"><div><b><i class="stepn">3</i>${pairLabel(d.pair)}</b> · ${d.picks.length ? d.picks.map((p) => `${CH[p.id].name} ${LV[p.level]}`).join(' · ') : 'pick 3 challenges'} · up to ${pts} challenge points, plus ${RESULT_PTS.win} for a win or ${RESULT_PTS.loss} for a loss
-  <div class="small muted">Ticket ${euro(ticket)} · <b>nothing is charged now</b>: the ticket is taken when your game enters a contest. First game with this champion and role after locking · no changes after locking · unlocking takes 1 hour. ${rl('signups')}</div>
+  <div class="small muted">Ticket ${euro(ticket)} · <b>nothing is charged now</b>: the ticket is taken when your game enters a contest. First game with this champion and role after locking · no changes after locking · cancelling runs a check first. ${rl('signups')}</div>
   ${ticket > S.balance ? `<div class="small l">Your balance (${euro2(S.balance)}) does not cover this ticket.</div>` : ''}</div>
   <button class="btn" id="lock" ${d.picks.length === 3 && ticket <= S.balance ? '' : 'disabled'}>Enter the contest</button></div></div>`;
   pp.bind(() => viewJoin(ticket));
@@ -2378,7 +2407,7 @@ function viewContest(id) {
     ${openRows.has(k) ? `<tr class="detail"><td></td><td colspan="4">${e.results.map((r) => `<div class="small">${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span> ${fmt(r.id, r.value)} for a line of ${fmt(r.id, r.hi)} → <b>${r.points}</b> pts</div>`).join('')}</td></tr>` : ''}`;
   }).join('');
   app.innerHTML = `<p class="back"><a href="#/contests">← Contests</a></p><div class="hello contest-head ${c.state === 'done' ? 'is-finished' : ''}"><div><p class="eyebrow">Prize contest · 20 players · rules v1 ${rl('changes', '')}</p><h1>${cName(c.ticket)} #${num(c.id)}</h1>
-  <p class="sub">${c.state === 'open' ? `<span class="tag wait">Open ${c.entries.length}/${SEATS}</span> Provisional: it changes as games come in.` : `<span class="tag ok">Finished</span> ${day(c.closedAt)}.${me ? (me.prize ? ` <b>${ord(me.place)} place: you won ${euro2(me.prize)}.</b> It is in your wallet.` : '') + (above ? ` ${Math.round((above.total - me.total) * 10) / 10} points to the place above.` : '') : ''}`} Riot IDs only; each player measured against their own tier. Tap a row for the values.</p></div>
+  <p class="sub">${c.state === 'open' ? `<span class="tag wait">Open ${c.entries.length}/${SEATS}</span> Provisional: it changes as games come in.` : `<span class="tag ok">Finished</span> ${day(c.closedAt)}.${me ? (me.prize ? ` <b>${ord(me.place)} place: you won ${euro2(me.prize)}.</b> It is in your wallet.` : '') + (above ? ` ${Math.round((above.total - me.total) * 10) / 10} points to the place above.` : '') : ''}`} ${TERMS.riotId} ${TERMS.ownTier} Tap a row for the values.</p></div>
   <div class="counter"><b>${c.entries.length}</b><span>of ${SEATS}</span></div></div>
   <table class="lb"><tr class="head"><th>#</th><th>Player</th><th>Challenges</th><th style="text-align:right">Pts</th>${c.state === 'done' ? '<th style="text-align:right">Won</th>' : ''}</tr>${html}</table>
   <p class="small muted" style="margin-top:8px">✓ made it · ◐ part of the way (window scoring) · ✗ missed. “=” is a tie: tied players share the prizes of the places they hold. ${rl('contests')}</p>`;
@@ -2436,53 +2465,72 @@ function viewSupport() {
 /** How the numbers are made: the same words on the entry page and in the rules. */
 function dataList() {
   return `<ul><li><b>Where the numbers come from:</b> public ranked solo games on EUW, from Iron to Master, read through Riot's official API after they end: ${D.facts.games.toLocaleString('en-GB')} games, 48,659 of them with the minute-by-minute timeline some challenges need. Nothing is read during a game.</li>
-  <li><b>Lines per champion, role and tier:</b> each champion and role has its own lines, and each tier moves them by a correction measured per role. A line sits where the average player of that tier reaches it in about 60% of games (easy), 35% (medium) or 15% (hard).</li>
-  <li><b>Tiers with few games are grouped:</b> Iron, Bronze and Silver count together with Gold. A champion and role gets challenges only with enough games: ${D.facts.pairs} today.</li>
+  <li><b>Lines per champion, role and rank tier:</b> each champion and role has its own lines, and each rank tier moves them by a correction measured role by role. A line sits where the average player of that tier reaches it in about 60% of games (easy), 35% (medium) or 15% (hard).</li>
   <li><b>Tested before use:</b> lines are fixed on older games and tested on newer ones. A challenge is offered only if it happens as often as declared, whether the game is won or lost, and better players make it happen more often.</li>
   <li><b>Your games never set your lines:</b> they are computed on everyone's games, never on yours.</li></ul>`;
 }
 const dataProof = () => `On newer games the challenges happened 60.1%, 35.1% and 15.0% of the time. A player's results on odd and even games correlate ${D.facts.follow.toFixed(2)}; winning alone, ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most ×${D.facts.edgeChampion.toFixed(2)}.`;
+/** The rules, version 1: the English text of the rulebook (the Regolamento tab of "Skybreak: regole e prove"),
+ *  article by article. Change the rulebook first, then this text; old wordings go in tests/old-phrases.json. */
 const RULES = [
-  ['what', 'What Skybreak is', `<p>Skybreak judges your ranked solo games against the average player of your tier with the same champion and role. The challenges and their thresholds are the same everywhere in the app. Two areas on the same judgement:</p>
-  <ul><li><b>Personal area</b> (free): Intelligence, to study the game, and Training, to fix your own game. Analysis only.</li><li><b>Contest area</b>: free training contests, where whoever improves most earns progress points, and prize contests of 20 players: Rising, Pro and Elite, with a 2, 5 or 10 € ticket. The prizes go to the first 14 places; the last 6 win nothing and lose their ticket.</li></ul><p>Nothing appears on your screen during the game: no overlay, no pop-ups.</p>`],
-  ['accounts', 'Accounts', `<div class="tablewrap"><table><tr><th></th><th>Base</th><th>Verified</th></tr><tr><td>What you can do</td><td>the whole personal area; look at the contest lobby and leaderboards</td><td>also: prize contests, the wallet, using points</td></tr><tr><td>What it needs</td><td>email, password, country, the rules accepted, your Riot account linked with Riot Sign On</td><td>also: first and last name, date of birth, address, a document</td></tr></table></div>
-  <ul><li>One person has one Skybreak account and one Riot account.</li><li><b>The linked Riot account can never be changed.</b></li><li>Skybreak never asks for your Riot password.</li><li>In contests, other players see only your Riot ID.</li><li>You can download your data and ask for deletion; first withdraw your balance and wait for open contests to finish.</li></ul>`],
-  ['personal', 'Personal area', `<ul><li><b>Intelligence:</b> all your ranked solo games, your mains against the players of your tier, and every champion's numbers by role and tier. No rating, and no advice on which challenges to pick in contests.</li>
-  <li><b>Training:</b> sign up a game with a champion and role. The game is judged on all the challenges of that champion and role, the same as in contests, and you see your position among the players of your tier.</li>
-  <li><b>Training contests:</b> free, 20 training games, any tier. The leaderboard is by improvement: each game against its tier and against the player's own past training games on the same champion, the same role and both together. The number counts only inside the contest. The final formula is still open.</li>
-  <li><b>Points</b> will be earned by improving, and will pay for coaching and other services; using them needs a verified account. They never become money. Not in the demo yet.</li></ul>`],
-  ['challenges', 'Challenges and scoring', `<ul><li><b>Fair</b> means a challenge happens as often as declared to anyone who plays that champion, in that role, at that tier, whether the game is won or lost. <b>Real</b> means better players make it happen more often.</li>
-  <li><b>Levels:</b> easy, the average player makes it in about 6 games out of 10; medium, about 1 in 3; hard, about 1 in 7. Points: ${POINTS.easy}, ${POINTS.medium}, ${POINTS.hard}.</li>
-  <li><b>Thresholds</b> are the same for everyone, per champion, role and tier, computed on everyone's public ranked games and never on yours. A challenge is offered to a champion and role only if it passes every test.</li>
-  <li><b>Window scoring:</b> reach the line of the chosen level and you get all its points; between the line below and that line, points grow in proportion; below it, nothing. Never more than the chosen level. A contest game scores the sum of its 3 challenges.</li></ul>
+  ['what', 'What Skybreak is', `<p>1.1 Skybreak is a tool to improve your performance in League of Legends. It judges your ranked solo queue games (SoloQ): each game is compared with the average player of your rank tier, on the same champion and in the same role.</p>
+  <p>1.2 The challenges and their thresholds are the same everywhere in the app.</p>
+  <p>1.3 Skybreak has two areas, with the same judgement:</p>
+  <ul><li><b>The personal area</b>, free: Intelligence and Training. It is analysis only, and there is nothing to win.</li><li><b>The contest area</b>: training contests, free, and the prize contests ${TICKETS.map((t) => CONTEST_NAME[t]).join(', ').replace(/, ([^,]*)$/, ' and $1')}, with a ticket. Every contest has ${SEATS} players, and each plays their own game whenever they want: nobody plays together with the others.</li></ul>
+  <p>1.4 During a game Skybreak shows nothing on your screen: no overlay, no notifications. It reads games only after they have ended.</p>`],
+  ['accounts', 'Accounts', `<p>2.1 There are two kinds of account.</p><div class="tablewrap"><table><tr><th></th><th>Base account</th><th>Verified account</th></tr><tr><td>What you can do</td><td>The whole personal area and training contests; view the lobby and the leaderboards of prize contests</td><td>In addition: prize contests, the wallet and using progress points</td></tr><tr><td>What it requires</td><td>Email, password, country, acceptance of the rules, a Riot account linked with Riot Sign On</td><td>In addition: first and last name, date of birth, address, an identity document</td></tr></table></div>
+  <p>2.2 A person can have only one Skybreak account, linked to only one Riot account.</p><p>2.3 <b>The linked Riot account can never be changed.</b></p><p>2.4 Skybreak never asks for your Riot password.</p><p>2.5 In contests, other players see only your Riot ID, never your personal details.</p><p>2.6 You can download your data and ask for your account to be deleted. First you must withdraw your balance and wait for the contests you are in to end.</p>`],
+  ['personal', 'The personal area', `<p>3.1 <b>Intelligence</b> shows all your ranked SoloQ games, your main champions compared with the players of your rank tier, and the numbers of every champion by role and rank tier: builds, matchups, tier lists and patch history.</p>
+  <p>3.2 Intelligence gives players no rating and does not advise which challenges to choose in contests.</p>
+  <p>3.3 <b>Training</b> analyses every ranked SoloQ game you play. It compares it with your usual game and with the average player of your rank tier, on the same champion and role, on the same challenges as the contests.</p>
+  <p>3.4 Training is analysis only, visible only to you: there is nothing to enter and nothing to win.</p><p>3.5 The personal area is always free.</p>`],
+  ['challenges', 'Challenges and scoring', `<p>4.1 A <b>challenge</b> is a measurable goal in a game: for example farm at 10 minutes, or deaths. Every champion in every role has its own challenges.</p>
+  <p>4.2 A challenge is <b>fair</b> if it succeeds as often as declared for those who play that champion, in that role and in that rank tier, both in games won and in games lost. It is <b>real</b> if players with more mastery of that champion make it succeed more often. A challenge is offered for a champion and role only if it is fair and real.</p>
+  <p>4.3 Every challenge has three levels:</p><div class="tablewrap"><table><tr><th>Level</th><th>How often the average player of your rank tier makes it</th><th>Points</th></tr><tr><td>Easy</td><td>about 6 games out of 10</td><td>${POINTS.easy}</td></tr><tr><td>Medium</td><td>about 1 game in 3</td><td>${POINTS.medium}</td></tr><tr><td>Hard</td><td>about 1 game in 7</td><td>${POINTS.hard}</td></tr></table></div>
+  <p>4.4 The <b>threshold</b> is the value to reach for each level. It is the same for all players of the same champion, role and rank tier. It is computed on everyone's public ranked games, never on yours. Each threshold has two values, one for games won and one for games lost, so that the challenge succeeds as often as declared in both.</p>
+  <p>4.5 <b>Window scoring.</b> If you reach the threshold of the chosen level, you get all its points. At the threshold of the level below you get 0 points, and between the two thresholds the points grow in proportion up to the maximum. Below the threshold of the level below you get 0. You never get more points than the chosen level. For the easy level, the threshold below is a lower threshold computed the same way.</p>
+  <p>4.6 <b>The score of a game in a prize contest</b> is its result plus the 3 chosen challenges: ${RESULT_PTS.win} points for a win, ${RESULT_PTS.loss} for a loss, plus the points of the challenges, at most ${POINTS.hard * 3}. The maximum is therefore ${RESULT_PTS.win + POINTS.hard * 3} points.</p>
   <div class="tablewrap"><table><tr><th>Challenge</th><th>What it measures</th></tr>${D.challenges.map((c) => `<tr><td><b>${c.name}</b><br><span class="small muted">${c.family}</span></td><td class="small">${c.text.replace(/\{x\}|\{xl\}/g, '<i>threshold</i>').replace(/\{y\d0\}/g, '…')}</td></tr>`).join('')}</table></div>`],
-  ['method', 'How we treat the data', `${dataList()}<p class="small muted">${dataProof()}</p>`],
-  ['two', 'The two contests', `<div class="tablewrap"><table><tr><th></th><th>Training contest</th><th>Prize contest</th></tr>
-  <tr><td>What you choose</td><td>Nothing: your next solo queue game, any champion</td><td>A champion, a role and 3 challenges</td></tr>
-  <tr><td>How you are judged</td><td>Against your own usual game with that champion and role, and against the other 19</td><td>On the 3 challenges, with thresholds for your rank</td></tr>
-  <tr><td>What you win</td><td>Progress points: merch, coaching, team try-outs, real tournaments</td><td>Prizes for the first 14 of 20 (${TICKETS.map((t) => `${CONTEST_NAME[t]} ${euro(t * PRIZE_X.reduce((a, x) => a + x, 0))}`).join(', ')} in all) and progress points; the last 6 win nothing</td></tr>
-  <tr><td>Cost</td><td>Free</td><td>A ticket (2, 5 or 10 €)</td></tr></table></div>
-  <p><b>Training contest.</b> ${EXPLAIN.training}</p><p><b>Prize contest.</b> ${EXPLAIN.prize}</p>`],
-  ['signups', 'Entries and checks', `<p>The same for training and for prize contests.</p><ul><li><b>Entry:</b> you enter your next game before playing it. In prize contests you also choose the champion, the role and the 3 challenges with their levels. After entering nothing changes.</li>
-  <li><b>Why before:</b> if games could be chosen after they were played, everyone would enter only their best one.</li>
-  <li><b>The game:</b> your first solo queue game started after entering; in prize contests, with exactly that champion and role. Only solo queue counts.</li>
-  <li><b>One game, two contests:</b> a game can enter a training contest and a prize contest at the same time, so you can win twice or lose twice. A prize contest always includes a training contest: the game enters one either way. Several entries of the same kind with the same champion and role queue up: the first game goes to the first entry. You are never twice in the same contest.</li>
-  <li><b>Checks:</b> one every day for everyone, and the Check my games button whenever you want.</li><li><b>Entries not played by the next day's check are removed</b>, in both contests, at no cost. Prize entries your balance no longer covers are removed too.</li>
-  <li><b>Cancelling:</b> runs a check at once. If a valid game is found, it counts and the cancellation does not apply. If you are in a game, it is refused. Otherwise it takes effect after 1 hour, if no valid game started before the request. In training contests too, so a bad game can't be hidden.</li>
-  <li><b>Only entered games are analysed.</b></li></ul>
-  <div class="tablewrap"><table><tr><th>Case</th><th>Rule</th></tr><tr><td>Remakes, games under 10 minutes</td><td>Do not count: the entry keeps waiting.</td></tr><tr><td>Dodge</td><td>Not a game: nothing happens.</td></tr><tr><td>Surrender</td><td>Counts normally.</td></tr><tr><td>Normal, flex, ARAM</td><td>Do not count.</td></tr></table></div>`],
-  ['contests', 'Prize contests', `<ul><li><b>Wallet:</b> your balance is in euro. A ticket is taken only when your game enters a contest; until then the balance stays yours.</li>
-  <li><b>Your balance can never fall short:</b> after a game enters, sign-ups the remaining balance does not cover are removed, at no cost.</li>
-  <li><b>20 seats.</b> A contest lasts until 20 games have entered; then final leaderboard and prizes. While open you see the counter and the provisional leaderboard. If it does not fill within the maximum time, it is cancelled and every ticket goes back.</li></ul>
+  ['method', 'How the numbers are made', `<p>5.1 The numbers come from public ranked SoloQ games on EUW, from Iron to Master, read through Riot's official API after they have ended. During a game Skybreak reads nothing.</p>
+  <p>5.2 The challenge thresholds are computed on ${D.facts.games.toLocaleString('en-GB')} games, 48,659 of them with the minute-by-minute timeline that some challenges need. Today the number of games is limited by the developer key of Riot's API: with many more games the thresholds would be even more precise. The champion numbers in Intelligence use a larger set, which the site keeps up to date.</p>
+  <p>5.3 Every champion in every role has its own thresholds, and each rank tier moves them with a correction measured role by role.</p>
+  <p>5.4 Thresholds are set on the older games and tested on the newer ones. On the newer games the challenges succeeded 60.1%, 35.1% and 15.0% of the time. To check that a challenge depends on skill, the games of every player with at least 30 games in the data are split into odd and even: the results in the two halves correlate ${D.facts.follow.toFixed(2)}, while winning alone correlates ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most an advantage of ${D.facts.edgeChampion.toFixed(2)} times.</p>`],
+  ['signups', 'Entering, playing, checks and cancelling', `<p>This article applies to both training contests and prize contests.</p>
+  <p>6.1 <b>Entering.</b> You enter your next game before playing it. In prize contests you also choose the champion, the role and the 3 challenges with their level. After entering, nothing can be changed.</p>
+  <p>6.2 <b>The contest game</b> is the first ranked SoloQ game started after entering. In prize contests it must be played with exactly the chosen champion and role.</p>
+  <p>6.3 <b>One game, two contests.</b> A game counts for only one prize contest. A prize contest always includes a training contest, so the same game also enters a training contest: you can win or lose twice. You are never twice in the same contest.</p>
+  <p>6.4 <b>Several identical entries.</b> If you have several entries of the same kind with the same champion and role, games go in order: the first game to the first entry.</p>
+  <p>6.5 <b>Checks.</b> Skybreak checks everyone's games once a day. You can also check whenever you want with the Check my games button.</p>
+  <p>6.6 <b>Entries not played.</b> An entry not played by the next day's check is cancelled, in training contests and in prize contests.</p>
+  <p>6.7 <b>Cancelling.</b> You can cancel an entry until its game has entered a contest. Cancelling runs a check at once:</p>
+  <ul><li>if it finds a valid game started after the entry, the game counts and the cancellation does not apply;</li><li>if you are in a game at that moment, the cancellation is refused: try again after the game;</li><li>otherwise the entry is cancelled at once.</li></ul>
+  <p>This applies to training contests too, so a bad game cannot be hidden.</p>
+  <p>6.8 Only entered games count in contests. Training, instead, analyses all your ranked games, for you alone.</p>
+  <p>6.9 <b>Withdrawals.</b> You cannot withdraw your balance while you have prize contest entries waiting for their game.</p>`],
+  ['games', 'Which games count', `<div class="tablewrap"><table><tr><th>Case</th><th>Rule</th></tr><tr><td>Remakes and games under 10 minutes</td><td>Do not count: the entry keeps waiting and no ticket is taken.</td></tr><tr><td>Dodges</td><td>Not a game: nothing happens.</td></tr><tr><td>Surrenders</td><td>Count normally: a win for the side that wins, a loss for the side that surrenders.</td></tr><tr><td>Games played in duo</td><td>Do not count. It is a rule of honour: by entering a game you declare that you play it alone.</td></tr><tr><td>Normal, flex, ARAM and other queues</td><td>Do not count: only SoloQ counts.</td></tr></table></div>`],
+  ['training', 'Training contests and progress points', `<p>8.1 The training contest is free and open to all rank tiers together, with a base account. It has ${SEATS} players, and each plays their own game.</p>
+  <p>8.2 Nothing is chosen: your next SoloQ game counts, with any champion.</p>
+  <p>8.3 Each game is compared with the usual game of whoever played it, with that champion and role. Whoever improves most ranks highest.</p>
+  <p>8.4 The improvement number counts only inside that contest.</p>
+  <p>8.5 Training contests award <b>progress points</b>. They are earned only by improving: they are never bought and never become money.</p>
+  <p>8.6 Progress points open coaching, merch and try-outs with a team. Using them requires a verified account.</p>`],
+  ['contests', 'Prize contests', `<p>9.1 <b>The three contests.</b> ${TICKETS.map((t) => `${CONTEST_NAME[t]}, with a ${euro(t)} ticket`).join('; ')}. The ticket is the price to take part: it is not a sure win. They require a verified account and the 3 challenges chosen when entering.</p>
+  <p>9.2 <b>Thresholds of your own rank tier.</b> Each player is judged on the thresholds of their own rank tier: an Iron and a Diamond compete in the same contest on equal terms.</p>
+  <p>9.3 <b>The wallet.</b> The balance is in euro. The value of the ticket is taken from the balance only when the game enters the contest; until then the balance stays yours. If the balance does not cover an entry, the entry is cancelled.</p>
+  <p>9.4 <b>${SEATS} seats.</b> A contest stays open until ${SEATS} games have entered; then it closes with the final leaderboard and the prizes. While it is open you see the seat counter and the provisional leaderboard, with the other players' Riot IDs and their results challenge by challenge.</p>
+  <p>9.5 <b>Maximum time.</b> If a contest does not reach ${SEATS} games within 2 days, it is cancelled and every ticket goes back to the balance.</p>
+  <p>9.6 <b>Prizes.</b> Prizes go to the first ${PRIZE_X.filter((x) => x > 0).length} places. Only the first ${PRIZE_X.filter((x) => x > 1).length} receive more than the value of the ticket. From ${ord(PRIZE_X.filter((x) => x > 0).length + 1)} to ${ord(SEATS)} place nothing is won and the ticket is lost.</p>
   ${prizeTable()}
-  <p><b>Ties:</b> players on the same points add up the prizes of the places they hold and split them equally.</p>`],
-  ['fairplay', 'Fair play', '<p>Zero tolerance on contest fair play: abuse is punished directly. No smurfs, no accounts shared or played by someone else. The ban is on the person, not on the game account.</p>'],
-  ['data', 'Your data', '<ul><li>Skybreak reads from Riot, through the official API and after you sign in with Riot: Riot ID, region, rank tier and your ranked solo games. Nothing during the game.</li><li>We keep your sign-ups, the games found and how they were judged, contests, your balance and its movements; for verified accounts, the result of the identity check.</li><li>No player ratings, no data sold, nobody\'s personal details shown.</li><li>You can download your data and ask for deletion from your Account.</li></ul>'],
-  ['changes', 'When rules change', '<p>The rules are the same for everyone and public before you sign up. They change only with notice; a contest already open finishes under the rules it started with (v1).</p>'],
-  ['open', 'Still open', '<ul><li>The maximum time of a contest that does not fill.</li><li>The hour of the end-of-day check and how many manual checks per day.</li><li>The final improvement formula.</li><li>How points are earned and what they pay for.</li></ul>'],
+  <p>9.7 <b>Ties.</b> Players on the same points add up the prizes of the places they hold and split them equally. A cent left over by the split goes to whoever entered the contest first.</p>
+  <p>9.8 <b>Training contest included.</b> The game of a prize contest also enters a training contest and earns progress points (6.3 and 8).</p>`],
+  ['fairplay', 'Fair play', '<p>10.1 On contest fair play the tolerance is zero: abuse is punished directly.</p><p>10.2 Smurfs, and accounts shared or played by another person, are forbidden.</p><p>10.3 A ban hits the person, not only the game account.</p>'],
+  ['data', 'Your data', '<p>11.1 After you sign in with Riot, Skybreak reads from Riot, through the official API: your Riot ID, region, rank tier and your ranked SoloQ games. During a game it reads nothing.</p><p>11.2 Skybreak keeps: your entries, the games found and how they were judged, contests, your balance and its movements. For verified accounts it also keeps the result of the identity check.</p><p>11.3 Skybreak calculates no player ratings, sells no data and shows nobody the personal details of others.</p><p>11.4 You can download your data and ask for its deletion from the Account page (see 2.6).</p>'],
+  ['changes', 'When the rules change', '<p>12.1 The rules are the same for everyone and public before you sign up.</p><p>12.2 They change only with notice. A contest already open ends under the rules it started with.</p><p>12.3 The rules carry a version number: this is version 1.</p>'],
+  ['open', 'Still to be decided', '<p>These points are not rules yet: once decided, they go into the articles.</p><ul><li>The time of the end-of-day check and how many manual checks per day (6.5).</li><li>The final improvement formula in training contests (8.4).</li><li>How many progress points each improvement is worth and what each reward costs (8.6).</li><li><b>Other prize curves.</b> Besides Rising, Pro and Elite there will be variants with prizes shifted more towards the top places. Each variant will have its own prize table, published before entering.</li></ul>'],
 ];
 function viewRules(sec) {
   app.innerHTML = `<div class="rules"><div class="route-title"><p class="eyebrow">The same for everyone</p><h1>Rules</h1><p>Public before you sign up, changed only with notice.</p></div>
+  <details class="card rules-short"><summary><b>The rules in short</b> <span class="small muted">· one sentence per system, the same on every page</span></summary><ul>${Object.values(TERMS).map((t) => `<li>${t}</li>`).join('')}</ul></details>
   <div class="rules-body"><nav class="toc" aria-label="Sections">${RULES.map(([id, n], i) => `<a href="#/rules/${id}" class="${id === sec ? 'on' : ''}">${i < RULES.length - 1 ? `<span>${i + 1}</span>` : '<span>·</span>'}${n}</a>`).join('')}</nav>
   <div class="rules-text">${RULES.map(([id, n, body], i) => `<section id="r-${id}" class="${id === sec ? 'hl' : ''}"><h2>${i < RULES.length - 1 ? `${i + 1}. ` : ''}${n}</h2>${body}</section>`).join('')}</div></div></div>`;
   if (sec && document.getElementById(`r-${sec}`)) requestAnimationFrame(() => document.getElementById(`r-${sec}`).scrollIntoView({ block: 'start' }));
@@ -2493,17 +2541,17 @@ function viewRules(sec) {
  *  Back, Next and close at every stop, and the reviewer can wander off and come back to the stop. */
 const TOUR = [
   { to: () => '#/home', name: 'Home', title: 'A player\'s own games, read after they end',
-    text: 'Everything comes from finished ranked solo games, read through the official API. Nothing runs during a game: no overlay, no pop-ups.' },
+    text: `${TERMS.during} ${TERMS.data}` },
   { to: () => { const g = S.games.filter((x) => x.analysed).slice(-1)[0]; return g ? `#/train/game/${g.id}` : '#/train'; }, name: 'Training', title: 'One game against the average of the same rank tier',
-    text: 'Each game is compared with the player\'s usual one and with the average player of the same tier on the same champion. Rank tier only: no MMR and no player rating.' },
+    text: `${TERMS.training} Rank tier only: no MMR and no player rating.` },
   { to: () => '#/intel', name: 'Intelligence', title: 'The numbers of every champion',
     text: 'Builds, matchups and tier lists by role and rank tier, from public ranked games. To study the game; nothing here is advice for a contest.' },
   { to: () => '#/contests/training', name: 'Training contest', title: 'Free: 20 players, each in their own game',
-    text: 'Nobody plays together. Whoever improves most on their own usual game earns progress points for coaching, merch and try-outs. Points are earned only, never bought.' },
+    text: `${TERMS.trainingContest} ${TERMS.points}` },
   { to: () => '#/contests/prize', name: 'Prize contests', title: 'A ticket to compete, prizes apart',
-    text: 'Rising, Pro and Elite: prizes for the first 14 of 20, judged on thresholds for each player\'s own tier. The last 6 win nothing and lose their ticket. Verified accounts only; play money in this demo.' },
+    text: `${TERMS.prizeContest} ${TERMS.ticket} ${TERMS.ownTier} ${TERMS.prizes} Verified accounts only; play money in this demo.` },
   { to: () => { const c = Object.values(S.contests).filter((x) => x.kind !== 'imp' && x.state === 'done' && x.entries.some((e) => e.you)).sort((a, b) => b.closedAt - a.closedAt)[0]; return c ? `#/contest/${c.id}` : '#/mine/finished'; }, name: 'A finished contest', title: 'The final ranking',
-    text: 'Score: the result of the game plus its three challenges. Other players see only the Riot ID. Players, time and money are simulated in the demo; the games and thresholds are real.' },
+    text: `${TERMS.score} ${TERMS.riotId} Players, time and money are simulated in the demo; the games and thresholds are real.` },
 ];
 function tourBar() {
   let el = $('#tour');
@@ -2587,7 +2635,7 @@ document.addEventListener('click', (e) => {
   if (u) { const s = S.signups.find((x) => x.id === u.dataset.unlock); if (s && s.status === 'waiting') { unlock(s); render(); } return; }
   if (e.target.closest('[data-signout]')) { S.profile = null; save(); location.hash = '#/signin'; return; }
   if (e.target.closest('[data-deposit]')) { money('deposit', 1000, null); save(); toast('Demo: 10 € of play money added.'); render(); return; }
-  if (e.target.closest('[data-withdraw]')) { toast('In the real product withdrawals go to your payment provider.'); return; }
+  if (e.target.closest('[data-withdraw]')) { toast(S.signups.some((x) => x.kind === 'contest' && active(x)) ? 'You cannot withdraw while you have prize contest entries waiting for their game.' : 'In the real product withdrawals go to your payment provider.'); return; }
   const me = $('details.me[open]');
   if (me && !e.target.closest('details.me')) me.open = false;
 });

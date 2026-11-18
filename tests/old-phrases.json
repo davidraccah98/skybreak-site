@@ -1,0 +1,125 @@
+{
+  "about": "Old wordings of rules that must not appear on any page. When a rule is rewritten, its old sentence goes here, with the article of the rulebook (the Regolamento tab of 'Skybreak: regole e prove').",
+  "phrases": [
+    {
+      "rule": 11,
+      "phrase": "scores the sum of its 3 challenges",
+      "since": "2026-11-17",
+      "now": "100 for a win, 50 for a loss, plus the 3 challenges"
+    },
+    {
+      "rule": 20,
+      "phrase": "Up to twice the ticket",
+      "since": "2026-11-17",
+      "now": "prizes for the first 14 of 20; the last 6 win nothing"
+    },
+    {
+      "rule": 23,
+      "phrase": "Not in the demo yet",
+      "since": "2026-11-17",
+      "now": "the demo shows progress points and what they open"
+    },
+    {
+      "rule": 22,
+      "phrase": "against its tier and against the player's own past",
+      "since": "2026-11-17",
+      "now": "against the usual game of whoever played it, with that champion and role"
+    },
+    {
+      "rule": 22,
+      "phrase": "whoever improves most wins",
+      "since": "2026-11-17",
+      "now": "whoever improves most ranks highest"
+    },
+    {
+      "rule": 23,
+      "phrase": "will pay for coaching",
+      "since": "2026-11-17",
+      "now": "they open coaching, merch, team try-outs and real tournaments"
+    },
+    {
+      "rule": "J",
+      "phrase": "Only entered games are analysed",
+      "since": "2026-11-17",
+      "now": "only entered games count in contests; Training analyses every ranked solo game"
+    },
+    {
+      "rule": "J",
+      "phrase": "sign up a game with a champion and role",
+      "since": "2026-11-17",
+      "now": "every ranked solo game is analysed in Training"
+    },
+    {
+      "rule": "words",
+      "phrase": "pays you to throw",
+      "since": "2026-11-17",
+      "now": "rewards you for throwing a game"
+    },
+    {
+      "rule": "6.7",
+      "phrase": "takes effect in 1 hour",
+      "since": "2026-11-18",
+      "now": "cancelling takes effect at once after the check"
+    },
+    {
+      "rule": "6.7",
+      "phrase": "unlocking takes 1 hour",
+      "since": "2026-11-18",
+      "now": "cancelling runs a check first"
+    },
+    {
+      "rule": "6.7",
+      "phrase": "it takes effect at",
+      "since": "2026-11-18",
+      "now": "cancelled at once"
+    },
+    {
+      "rule": "5",
+      "phrase": "Tiers with few games are grouped",
+      "since": "2026-11-18",
+      "now": "removed from the rulebook (article 5)"
+    },
+    {
+      "rule": "v1",
+      "phrase": "The two contests",
+      "since": "2026-11-18",
+      "now": "articles 8 and 9 of the rules, version 1"
+    },
+    {
+      "rule": "8.6",
+      "phrase": "real tournament",
+      "since": "2026-11-18",
+      "now": "points open coaching, merch and team try-outs; nothing said about tournament entries"
+    },
+    {
+      "rule": "glossary",
+      "phrase": "how much the other 19 improved",
+      "since": "2026-11-18",
+      "now": "TERMS.trainingContest"
+    },
+    {
+      "rule": "glossary",
+      "phrase": "for their own rank, so an Iron",
+      "since": "2026-11-18",
+      "now": "TERMS.ownTier"
+    },
+    {
+      "rule": "glossary",
+      "phrase": "the contests are in their own area",
+      "since": "2026-11-18",
+      "now": "TERMS.training"
+    },
+    {
+      "rule": "glossary",
+      "phrase": "measured against their own tier",
+      "since": "2026-11-18",
+      "now": "TERMS.ownTier"
+    },
+    {
+      "rule": "7, 10",
+      "phrase": "no shared accounts; a ban hits",
+      "since": "2026-11-18",
+      "now": "no shared accounts, no duo; anyone found abusing is banned without notice"
+    }
+  ]
+}

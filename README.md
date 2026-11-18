@@ -17,6 +17,12 @@ npx serve .
 
 or open `index.html` directly in a browser. Champion icons load from Riot's Data Dragon CDN; fonts from Google Fonts. The demo keeps its state in `localStorage`; Account › Reset the demo starts over.
 
+## Checks
+
+`node tests/check.mjs` opens every page of the demo in a headless Chrome at 1440, 768 and 375 px and checks: no errors, nothing wider than the screen, the same page head on every page, the prize score (100 for a win, 50 for a loss, at most 90 from the challenges), the prizes (14 paid places, the last 6 at zero, every finished contest paying out exactly its prizes), no betting words, and no old wording of a rule (`tests/old-phrases.json`). It starts its own server on port 4199 and takes about two minutes. Exit code 1 lists what failed. Needs Google Chrome or Edge (or `CHROME=<path>`).
+
+When a rule is rewritten, add its old sentence to `tests/old-phrases.json`, so the check finds any page still showing it.
+
 ## Files
 
 | File | What it is |
