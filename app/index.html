@@ -1735,6 +1735,65 @@
   /* the glossary on the Rules page: the same sentences every page uses */
   .rules-short { margin: 0 0 var(--s4); padding: 12px 16px; } .rules-short summary { cursor: pointer; }
   .rules-short ul { margin: 10px 0 2px; padding-left: 18px; color: var(--soft); display: grid; gap: 6px; font-size: 14px; }
+
+  /* ---------- the map of a game: kills, deaths, assists and objectives on a drawn Rift, your base bottom left ---------- */
+  .map-card { margin: var(--s4) 0; }
+  .map-grid { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 18px 24px; align-items: start; }
+  @media (max-width: 760px) { .map-grid { grid-template-columns: minmax(0, 1fr); } }
+  .gmap { margin: 0; display: grid; gap: 10px; } .gmap figcaption { font-weight: 700; }
+  .gmap svg { width: 100%; height: auto; display: block; }
+  .gmap .ground { fill: color-mix(in srgb, var(--panel2) 80%, #0b1a12); stroke: var(--line2); stroke-width: 6; }
+  .gmap .river { stroke: color-mix(in srgb, var(--sky) 13%, transparent); stroke-width: 95; stroke-linecap: round; fill: none; }
+  .gmap .lane { stroke: color-mix(in srgb, var(--ink) 11%, transparent); stroke-width: 60; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .gmap .base { stroke: none; } .gmap .base.own { fill: color-mix(in srgb, var(--sky) 30%, transparent); } .gmap .base.enemy { fill: color-mix(in srgb, var(--bad) 26%, transparent); }
+  .gmap .mlab { fill: color-mix(in srgb, var(--ink) 55%, transparent); font: 700 40px var(--f-text); letter-spacing: .1em; text-transform: uppercase; paint-order: stroke; stroke: #0b1220; stroke-width: 10px; }
+  .gmap .base-lab { font-size: 40px; }
+  .gmap .ty-k { fill: var(--good); stroke: #0a0f1d; stroke-width: 6; } .gmap .ty-k.solo { stroke: var(--ink); stroke-width: 8; }
+  .gmap .ty-a { fill: none; stroke: var(--sky); stroke-width: 8; }
+  .gmap path.ty-d { stroke: var(--bad); stroke-width: 12; stroke-linecap: round; fill: none; }
+  .gmap g.ty-o rect { stroke: #0a0f1d; stroke-width: 6; } .gmap g.ty-o.ours rect { fill: var(--dawn); } .gmap g.ty-o.theirs rect { fill: color-mix(in srgb, var(--muted) 70%, transparent); }
+  .gmap g.ty-o text { font: 800 30px var(--f-text); fill: #0a0f1d; }
+  .gmap rect.ty-t { stroke: #0a0f1d; stroke-width: 5; } .gmap rect.ty-t.ours { fill: color-mix(in srgb, var(--dawn) 70%, transparent); } .gmap rect.ty-t.theirs { fill: color-mix(in srgb, var(--bad) 55%, transparent); }
+  .gmap .mk { cursor: help; }
+  .gmap[data-ph="l"] .mk:not(.ph-l), .gmap[data-ph="m"] .mk:not(.ph-m), .gmap[data-ph="e"] .mk:not(.ph-e) { display: none; }
+  .gmap.no-k .ty-k, .gmap.no-d .ty-d, .gmap.no-a .ty-a, .gmap.no-o .ty-o, .gmap.no-t .ty-t { display: none; }
+  .gmap-ctl { display: grid; gap: 8px; } .gmap-ctl .chips { margin: 0; }
+  .gmap-keys { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mkey { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--muted); font-size: 12px; }
+  .mkey.on { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 55%, transparent); } .mkey b { color: inherit; }
+  .mkey i { width: 12px; height: 12px; display: inline-block; border-radius: 50%; }
+  .ky-k { background: var(--good); } .ky-a { border: 2px solid var(--sky); } .ky-d { background: var(--bad); border-radius: 2px !important; transform: rotate(45deg); width: 10px !important; height: 10px !important; }
+  .ky-o { background: var(--dawn); transform: rotate(45deg); border-radius: 1px !important; width: 10px !important; height: 10px !important; } .ky-t { background: color-mix(in srgb, var(--bad) 55%, transparent); border-radius: 1px !important; }
+  .map-notes { margin: 0; padding-left: 18px; display: grid; gap: 8px; color: var(--soft); }
+  .k-xp { background: var(--sky); }
+
+  /* the measured structures on Riot's minimap */
+  .gmap .st { stroke: #0a0f1d; stroke-width: 4; } .gmap .st.own { fill: #4aa3df; } .gmap .st.enemy { fill: #e05a5a; }
+  .gmap circle.st { fill: none; stroke-width: 7; } .gmap circle.st.own { stroke: #4aa3df; } .gmap circle.st.enemy { stroke: #e05a5a; }
+
+  /* ---------- the review of one game: the ten players on the Rift, minute by minute ---------- */
+  .review { margin: var(--s4) 0; }
+  .rv-grid { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+  @media (max-width: 860px) { .review { display: flex; flex-direction: column; gap: 12px; } .rv-grid { display: contents; } .rv-map { order: 1; } .rv-time { order: 2; margin-top: 0; } .rv-side { order: 3; } .review > header { order: 0; } }
+  .rv-map svg { width: 100%; height: auto; display: block; border-radius: var(--r3); }
+  .review .camp { fill: rgba(8,12,20,.7); stroke: #b49a5a; stroke-width: 4; } .review .camp.blue { stroke: #5aa9e6; } .review .camp.red { stroke: #e06a5a; } .review .camp.scuttle { stroke: #4fc3c0; }
+  .review .pit circle { fill: rgba(8,12,20,.45); stroke-width: 6; } .review .pit.drake circle { stroke: #e0a04a; } .review .pit.baron circle { stroke: #a07ad6; }
+  .review .pit text { font: 800 38px var(--f-text); fill: rgba(255,255,255,.75); }
+  .review .st { stroke: #0a0f1d; stroke-width: 4; } .review .st.own { fill: #4aa3df; } .review .st.enemy { fill: #e05a5a; }
+  .review circle.st { fill: none; stroke-width: 7; } .review circle.st.own { stroke: #4aa3df; } .review circle.st.enemy { stroke: #e05a5a; }
+  .review .st.down { fill: rgba(120,120,120,.35); stroke: rgba(10,15,29,.6); } .review circle.st.down { fill: none; stroke: rgba(140,140,140,.45); }
+  .review .pl .ring { stroke-width: 7; fill: #0a0f1d; } .review .pl.own .ring { stroke: #4aa3df; } .review .pl.enemy .ring { stroke: #e05a5a; } .review .pl.me .ring { stroke: var(--dawn); stroke-width: 10; }
+  .review .pl.died { opacity: .55; } .review .kx { stroke: #ff4d5e; stroke-width: 10; stroke-linecap: round; }
+  .review .taken rect { stroke: #0a0f1d; stroke-width: 5; } .review .taken.own rect { fill: #4aa3df; } .review .taken.enemy rect { fill: #e05a5a; } .review .taken text { font: 800 30px var(--f-text); fill: #0a0f1d; }
+  .review .fall { fill: none; stroke-width: 8; stroke-dasharray: 10 8; } .review .fall.own { stroke: #4aa3df; } .review .fall.enemy { stroke: #e05a5a; }
+  .rv-side { display: grid; gap: 10px; } .rv-now { margin: 0; font-size: 16px; }
+  .rv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; } .rv-list li { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 8px; font-size: 14px; }
+  .rv-t { color: var(--muted); font-variant-numeric: tabular-nums; } .rv-list b.own, .rv-now b.own { color: #6fb8ea; } .rv-list b.enemy { color: #ef7b7b; }
+  .rv-time { margin-top: 14px; display: grid; gap: 6px; }
+  .rv-track { width: 100%; height: 56px; display: block; } .rv-track .lead { fill: color-mix(in srgb, var(--sky) 22%, transparent); stroke: var(--sky); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .rv-track .zero { stroke: var(--line2); vector-effect: non-scaling-stroke; } .rv-track .tk { stroke-width: 2; vector-effect: non-scaling-stroke; } .rv-track .tk.own { stroke: #4aa3df; } .rv-track .tk.enemy { stroke: #e05a5a; } .rv-track .tk.o { stroke-width: 4; }
+  .rv-track .cur { stroke: var(--dawn); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .rv-ctl { display: flex; align-items: center; gap: 12px; } .rv-ctl input { flex: 1; accent-color: var(--accent); } .rv-mlab { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--soft); }
 </style>
 </head>
 <body data-area="public">

@@ -1752,6 +1752,11 @@ function champView(list) {
     ...(lost.length >= 3 ? [{ name: `Your losses (${lost.length})`, cls: 'you', v: meanCurve(lost.map((t) => t.cur), 'diff', 3) }] : []),
     ...(a?.cur?.diff?.length ? [{ name: `${tn} ${champ} (${a.n.toLocaleString('en-GB')})`, cls: 'tier', v: a.cur.diff }] : []),
   ].filter((s) => s.v.length >= 5);
+  const xseries = [
+    ...(won.length >= 3 ? [{ name: `Your wins (${won.length})`, cls: 'game', v: meanCurve(won.map((t) => t.cur), 'xpd', 3) }] : []),
+    ...(lost.length >= 3 ? [{ name: `Your losses (${lost.length})`, cls: 'you', v: meanCurve(lost.map((t) => t.cur), 'xpd', 3) }] : []),
+    ...(a?.cur?.xpd?.length ? [{ name: `${tn} ${champ} (${a.n.toLocaleString('en-GB')})`, cls: 'tier', v: a.cur.xpd }] : []),
+  ].filter((s) => s.v.length >= 5);
   const cost = earlyCost(pair);
   return `<section class="champ-view" aria-label="${pairLabel(pair)}" style="--splash:url('https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${trainChamp}_0.jpg')">
     <header class="cv-head">${icon(trainChamp, 'champ lg')}<div><p class="eyebrow">${label} · ${games.length} game${games.length > 1 ? 's' : ''}</p><h2>${pairLabel(pair)}</h2></div>
@@ -1763,6 +1768,7 @@ function champView(list) {
         ${top ? `<div class="priority"><p class="eyebrow">Priority</p><h3>${top.fix}</h3><p><b class="down">${top.f(top.v)}</b> · ${top.name} · average ${tn} ${champ} ${top.f(top.ref)}${wordsOf(top) ? ` · <b>${wordsOf(top)}</b>` : ''}</p><p class="small muted">${top.tip}${top.k === 'd14' && cost ? ` ${tn} ${champ} players with no death before minute 14 win ${cost.none}%; with 2 or more, ${cost.two}%.` : ''}</p></div>`
           : (meanSev(ms) < -0.1 && net > 0 ? `<div class="priority calm"><p class="eyebrow">One of your best picks</p><h3>Above the average ${tn} ${champ}</h3><p>Better on ${ms.filter((x) => x.sev <= -0.5).length} of ${ms.length} numbers, ${lpText(net)} over the ${label}. <b>To climb, play it more.</b></p></div>` : `<div class="priority calm"><p class="eyebrow">Priority</p><h3>Nothing clearly below your tier</h3><p class="small muted">Over the ${label}, every number is close to or above the average ${tn} ${champ}.</p></div>`)}
         ${series.length ? `<div class="cv-chart"><h4>Gold gap to your lane opponent, minute by minute</h4><div class="curve-legend">${series.map((s) => `<span><i class="k-${s.cls}"></i>${s.name}</span>`).join('')}</div>${lineChart(`cv-${pair}`, 'diff', series, [])}</div>` : ''}
+        ${xseries.length ? `<div class="cv-chart"><h4>XP gap to your lane opponent, minute by minute</h4><div class="curve-legend">${xseries.map((s) => `<span><i class="k-${s.cls}"></i>${s.name}</span>`).join('')}</div>${lineChart(`cv-${pair}-xpd`, 'xpd', xseries, [])}</div>` : ''}
       </div>
       <div class="cv-rows">
         <div class="mhead"><span>Lane, first 14 minutes</span><span class="gscale"><small>worse</small><small>${tn}</small><small>better</small></span><span></span><span>9 months</span></div>
@@ -1772,6 +1778,7 @@ function champView(list) {
         <p class="small muted">The bar starts at the average ${tn} ${champ}; the tick is your usual over all ${all.length} games.</p>
       </div>
     </div>
+    ${champMapBlock(pair, games)}
     ${matchupBlock(pair, all)}
     ${deathsBlock(pair, all)}
     ${setupBlock(pair, all)}
@@ -2128,7 +2135,7 @@ function bindBelow() {
   app.querySelectorAll('[data-tmode]').forEach((b) => (b.onclick = () => { trainMode = b.dataset.tmode; keepBelow(); }));
   app.querySelectorAll('[data-tdays]').forEach((b) => (b.onclick = () => { trainDays = Number(b.dataset.tdays); keepBelow(); }));
   app.querySelectorAll('[data-seg]').forEach((b) => (b.onclick = () => { trainSeg = b.dataset.seg; keepBelow(); }));
-  bindCurves();
+  bindCurves(); bindMaps();
 }
 const keepBelow = () => { const y = scrollY; refreshBelow(); scrollTo(0, y); };
 const keepTrain = () => { const y = scrollY; viewTrain(); scrollTo(0, y); };
@@ -2142,8 +2149,195 @@ function viewPastSignups() {
   app.innerHTML = `<p class="back"><a href="#/contests/training">← Training contest</a></p><div class="route-title"><p class="eyebrow">Training contest</p><h1>Past entries</h1></div>${ended.length ? `<div class="list">${ended.map(signupRow).join('')}</div>` : '<p class="muted">None yet.</p>'}`;
 }
 // ---------- the game report ----------
-const CURVE_KINDS = [['gold', 'Gold', (v) => v.toLocaleString('en-GB')], ['cs', 'Farm (CS)', (v) => String(v)], ['dmg', 'Damage to champions', (v) => v.toLocaleString('en-GB')], ['diff', 'Gold gap to your lane opponent', (v) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toLocaleString('en-GB')}`]];
+const CURVE_KINDS = [['gold', 'Gold', (v) => v.toLocaleString('en-GB')], ['cs', 'Farm (CS)', (v) => String(v)], ['dmg', 'Damage to champions', (v) => v.toLocaleString('en-GB')], ['diff', 'Gold gap to your lane opponent', (v) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toLocaleString('en-GB')}`], ['xpd', 'XP gap to your lane opponent', (v) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toLocaleString('en-GB')}`]];
 const curveCharts = {};
+// ---------- the map: where your kills, deaths, assists and the objectives happened ----------
+// Events come from the lab as [minute, kind, x / 10, y / 10, champion or objective, extra] (apps/lab/src/training-data.ts).
+// The map is drawn here, not Riot's picture. Red-side games are mirrored along the river (the Rift is symmetric that
+// way), so your base is always bottom left, the enemy base top right, and top lane and Baron stay where they are.
+const MAP = 1500;
+/** Towers (t), inhibitors (i) and nexus (n): [team, kind, x / 10, y / 10], measured where they fall in 8,000 ranked
+ *  games (apps/lab/src/rift-map.ts, data/lab/rift.json). */
+const RIFT = [[200,"t",1387,451],[100,"t",98,1044],[200,"t",896,851],[100,"t",1050,103],[200,"t",432,1388],[100,"t",585,640],[200,"t",794,1341],[200,"t",977,1011],[100,"t",151,670],[100,"t",692,148],[100,"t",117,429],[100,"t",505,481],[100,"t",365,370],[100,"i",117,358],[100,"i",321,322],[100,"t",175,227],[100,"t",218,181],[200,"t",1113,1121],[200,"i",1159,1167],[200,"t",1333,823],[200,"t",1305,1261],[200,"t",1261,1308],[200,"t",1362,1057],[200,"i",1360,1132],[200,"t",1048,1365],[200,"i",1128,1366],[100,"t",428,125],[100,"i",347,123],[100,"n",196,204],[200,"n",1283,1285]];
+const turnOf = (side) => (side === 200 ? ([x, y]) => [MAP - 10 - y, MAP - 10 - x] : (p) => p); // mirrored along the river: top lane stays top, Baron stays Baron
+/** Which part of the map a point is in (map units / 10, your base bottom left). */
+function zoneOf(x, y) {
+  if (x + y < 330 || x + y > 2650) return 'base';
+  if (Math.abs(x - y) < 250) return 'mid';
+  if (x < 300 || y > 1190) return 'top';
+  if (y < 300 || x > 1190) return 'bot';
+  if (Math.abs(x + y - (MAP - 10)) < 150) return 'river';
+  return 'jungle';
+}
+const LANE_ZONE = { TOP: 'top', MIDDLE: 'mid', BOTTOM: 'bot', UTILITY: 'bot' };
+const MONSTER = { BARON_NASHOR: ['B', 'Baron'], RIFTHERALD: ['H', 'Herald'], HORDE: ['G', 'Voidgrubs'], ATAKHAN: ['A', 'Atakhan'] };
+const DRAGONS = { AIR_DRAGON: 'Cloud', FIRE_DRAGON: 'Infernal', EARTH_DRAGON: 'Mountain', WATER_DRAGON: 'Ocean', HEXTECH_DRAGON: 'Hextech', CHEMTECH_DRAGON: 'Chemtech', ELDER_DRAGON: 'Elder' };
+const monsterOf = (m) => MONSTER[m] || (DRAGONS[m] || /DRAGON/.test(m) ? ['D', `${DRAGONS[m] || 'A'} dragon`] : ['?', m.toLowerCase()]);
+const mmss = (m) => `${Math.floor(m)}:${String(Math.round((m % 1) * 60)).padStart(2, '0')}`;
+const phaseOf = (m) => (m < 14 ? 'l' : m < 25 ? 'm' : 'e');
+/** What the map says before minute 14: kills and assists away from your lane (roaming), and how you died. */
+function mapSummary(evs, role, side = 100) {
+  const own = LANE_ZONE[role], turn = turnOf(side), early = evs.filter((e) => e.m < 14).map((e) => { const [x, y] = turn([e.x, e.y]); return { ...e, x, y }; });
+  const away = early.filter((e) => (e.k === 'k' || e.k === 'a') && own && !['base', own].includes(zoneOf(e.x, e.y)));
+  const deaths = early.filter((e) => e.k === 'd');
+  return { away, deaths, ganked: deaths.filter((e) => e.extra === 'jungle').length };
+}
+/** Turns a game's raw events into points on the drawn map. */
+function mapEvents(t, mirror = false) {
+  const turn = mirror ? turnOf(t.side) : (p) => p;
+  return (t.map || []).map(([m, k, x, y, who, extra]) => { const [tx, ty] = turn([x, y]); return { m, k, x: tx, y: ty, who, extra }; });
+}
+/** The drawn map with its markers; filters by phase and kind with the buttons under it (bindMaps). */
+function gameMap(id, evs, { title = '', many = false, side = 100 } = {}) {
+  const Y = (y) => MAP - y;
+  // The Rift: Riot's minimap from Data Dragon (as the champion icons), placed on the game's coordinates
+  // (x -120 to 14,870, y -120 to 14,980). On it, the towers, inhibitors and nexus where they fall in our games, and the
+  // two pits. In a single game the map is as it was played; the champion map mirrors red-side games along the river.
+  const own = side === 200 ? 200 : 100;
+  const art = `<image href="https://ddragon.leagueoflegends.com/cdn/${D.ddragon}/img/map/map11.png" x="-12" y="2" width="1499" height="1510" preserveAspectRatio="none"/>
+    ${RIFT.map(([team, k, x, y]) => { const c = team === own ? 'own' : 'enemy'; const t = k === 't' ? 'tower' : k === 'i' ? 'inhibitor' : 'nexus'; const sz = k === 'n' ? 30 : 20;
+      return k === 'i' ? `<circle class="st ${c}" cx="${x}" cy="${MAP - y}" r="${sz * 0.8}"><title>${c === 'own' ? 'Your' : 'Enemy'} ${t}</title></circle>`
+        : `<rect class="st ${c}" x="${x - sz / 2}" y="${MAP - y - sz / 2}" width="${sz}" height="${sz}"${k === 'n' ? ` transform="rotate(45 ${x} ${MAP - y})"` : ''}><title>${c === 'own' ? 'Your' : 'Enemy'} ${t}</title></rect>`; }).join('')}
+    <text class="mlab base-lab" x="${own === 100 ? 40 : MAP - 40}" y="${own === 100 ? MAP - 30 : 60}"${own === 100 ? '' : ' text-anchor="end"'}>your base</text>`;
+  const r = many ? 16 : 24;
+  const mark = (e) => {
+    const cx = e.x, cy = Y(e.y), cls = `mk ty-${e.k} ph-${phaseOf(e.m)}`;
+    if (e.k === 'k') return `<circle class="${cls}${e.extra === 0 ? ' solo' : ''}" cx="${cx}" cy="${cy}" r="${r}"><title>${mmss(e.m)} · you killed ${champName(e.who)}${e.extra === 0 ? ' alone' : ` with ${e.extra} other${e.extra > 1 ? 's' : ''}`} · ${zoneOf(e.x, e.y)}</title></circle>`;
+    if (e.k === 'a') return `<circle class="${cls}" cx="${cx}" cy="${cy}" r="${r * 0.7}"><title>${mmss(e.m)} · assist on ${champName(e.who)} · ${zoneOf(e.x, e.y)}</title></circle>`;
+    if (e.k === 'd') return `<path class="${cls}" d="M${cx - r} ${cy - r} L${cx + r} ${cy + r} M${cx + r} ${cy - r} L${cx - r} ${cy + r}"><title>${mmss(e.m)} · ${champName(e.who)} killed you${e.extra === 'jungle' ? ', with the jungler' : e.extra === 'lane' ? ', your lane opponent alone' : ''} · ${zoneOf(e.x, e.y)}</title></path>`;
+    if (e.k === 'o') { const [l, n] = monsterOf(e.who); return `<g class="${cls} ${e.extra ? 'ours' : 'theirs'}"><rect x="${cx - r}" y="${cy - r}" width="${r * 2}" height="${r * 2}" transform="rotate(45 ${cx} ${cy})"/><text x="${cx}" y="${cy + r * 0.45}" text-anchor="middle">${l}</text><title>${mmss(e.m)} · ${n}: ${e.extra ? `your team${e.extra === 2 ? ', with you' : ''}` : 'the enemy team'}</title></g>`; }
+    if (e.k === 't') return `<rect class="${cls} ${e.extra ? 'ours' : 'theirs'}" x="${cx - r * 0.6}" y="${cy - r * 0.6}" width="${r * 1.2}" height="${r * 1.2}"><title>${mmss(e.m)} · ${e.who === 'INHIBITOR' ? 'inhibitor' : 'tower'} ${e.extra ? 'destroyed by your team' : 'lost'}</title></rect>`;
+    return '';
+  };
+  const order = { t: 0, o: 1, a: 2, k: 3, d: 4 };
+  const pts = evs.slice().sort((a, b) => order[a.k] - order[b.k]).map(mark).join('');
+  const n = (k) => evs.filter((e) => e.k === k).length;
+  const kinds = [['k', 'Kills', n('k')], ['d', 'Deaths', n('d')], ['a', 'Assists', n('a')], ...(many ? [] : [['o', 'Objectives', n('o')], ['t', 'Towers', n('t')]])];
+  return `<figure class="gmap" id="map-${id}" data-ph="all">${title ? `<figcaption>${title}</figcaption>` : ''}
+    <svg viewBox="0 0 ${MAP} ${MAP}" role="img" aria-label="Map of ${title || 'the game'}: ${n('k')} kills, ${n('d')} deaths, ${n('a')} assists">${art}${pts}</svg>
+    <div class="gmap-ctl"><div class="chips" role="group" aria-label="Phase">${[['all', 'Whole game'], ['l', "Lane 0–14'"], ['m', "14–25'"], ['e', "25' +"]].map(([k, l]) => `<button class="chip ${k === 'all' ? 'on' : ''}" data-mph="${k}">${l}</button>`).join('')}</div>
+    <div class="gmap-keys">${kinds.map(([k, l, c]) => `<button class="mkey on" data-mty="${k}" aria-pressed="true"><i class="ky-${k}"></i>${l} <b>${c}</b></button>`).join('')}</div></div></figure>`;
+}
+function bindMaps() {
+  app.querySelectorAll('.gmap').forEach((fig) => {
+    fig.querySelectorAll('[data-mph]').forEach((b) => (b.onclick = () => { fig.dataset.ph = b.dataset.mph; fig.querySelectorAll('[data-mph]').forEach((x) => x.classList.toggle('on', x === b)); }));
+    fig.querySelectorAll('[data-mty]').forEach((b) => (b.onclick = () => { const on = !b.classList.contains('on'); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); fig.classList.toggle(`no-${b.dataset.mty}`, !on); }));
+  });
+}
+/** The map of one game, with what it says about the lane phase. */
+function mapBlock(t, h) {
+  if (!t?.map?.length) return '';
+  const evs = mapEvents(t), sum = mapSummary(evs, h.role, t.side), turn = turnOf(t.side), zoneAt = (e) => zoneOf(...turn([e.x, e.y]));
+  const lines = [
+    sum.away.length ? `<b>${sum.away.length}</b> kill${sum.away.length > 1 ? 's and assists' : ' or assist'} away from your lane before minute 14 (${[...new Set(sum.away.map((e) => zoneOf(e.x, e.y)))].join(', ')})` : LANE_ZONE[h.role] ? 'No kill or assist away from your lane before minute 14' : '',
+    sum.deaths.length ? `<b>${sum.deaths.length}</b> death${sum.deaths.length > 1 ? 's' : ''} before minute 14${sum.ganked ? `, ${sum.ganked} with the enemy jungler` : ''}` : 'No death before minute 14',
+  ].filter(Boolean);
+  return `<section class="card tech map-card"><header class="panel-head"><div><p class="eyebrow">Where it happened</p><h3>Map of the game</h3></div><span class="small muted">you played on the ${t.side === 200 ? 'red side, top right' : 'blue side, bottom left'}</span></header>
+    <div class="map-grid">${gameMap(h.id, evs, { side: t.side })}<ul class="map-notes">${lines.map((l) => `<li>${l}</li>`).join('')}<li class="muted small">Point at a mark for the minute and who. Lane = before minute 14.</li></ul></div></section>`;
+}
+/** Every kill, death and assist with this champion over the period, on one map: where you fight and where you die. */
+function champMapBlock(pair, games) {
+  const ts = games.map((g) => ({ g, t: tlOf(g) })).filter((x) => x.t?.map?.length);
+  if (ts.length < 3) return '';
+  const evs = ts.flatMap(({ t }) => mapEvents(t, true).filter((e) => ['k', 'd', 'a'].includes(e.k)));
+  const role = splitPair(pair).role, own = LANE_ZONE[role];
+  const early = evs.filter((e) => e.m < 14), away = early.filter((e) => e.k !== 'd' && own && !['base', own].includes(zoneOf(e.x, e.y)));
+  const deaths = evs.filter((e) => e.k === 'd'), zones = {};
+  for (const e of deaths) zones[zoneOf(e.x, e.y)] = (zones[zoneOf(e.x, e.y)] || 0) + 1;
+  const topZone = Object.entries(zones).sort((a, b) => b[1] - a[1])[0];
+  return `<section class="card tech map-card"><header class="panel-head"><div><p class="eyebrow">${ts.length} games · your base bottom left</p><h3>Where you fight and where you die</h3></div></header>
+    <div class="map-grid">${gameMap(`cv-${pair}`, evs, { many: true })}<ul class="map-notes">
+      <li><b>${(away.length / ts.length).toFixed(1)}</b> kills and assists a game away from your lane before minute 14${own ? '' : ''}</li>
+      ${topZone ? `<li>Most deaths happen in the <b>${topZone[0]}</b>: ${topZone[1]} of ${deaths.length}</li>` : ''}
+      <li class="muted small">Every kill, death and assist of the ${ts.length} games. Filter by phase to see the lane alone.</li></ul></div></section>`;
+}
+// ---------- the review of one game: the ten players on the Rift, minute by minute ----------
+// The file app/games/<id>.json (apps/lab/src/training-data.ts) has the 10 players, where each stood at every minute
+// (one point a minute: Riot's timeline has no more), every kill with its spot, the epic monsters and the buildings.
+const reviews = {};
+const loadReview = (id) => (reviews[id] ||= fetch(`games/${id}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null));
+/** The jungle's fixed spots (map units / 10), blue side; red side is the same turned half a circle. */
+const CAMPS = (() => { const blue = [['Blue Sentinel', 387, 790, 'blue'], ['Gromp', 209, 843, ''], ['Wolves', 378, 644, ''], ['Raptors', 694, 542, ''], ['Red Brambleback', 777, 403, 'red'], ['Krugs', 840, 264, '']]; return [...blue, ...blue.map(([n, x, y, k]) => [n, 1487 - x, 1487 - y, k])]; })();
+const SCUTTLES = [[440, 960], [1050, 517]];
+const PITS = [['Dragon', 984, 440, 'D'], ['Baron · Voidgrubs · Herald', 501, 1047, 'B']];
+const ROLE_NAME = { TOP: 'Top', JUNGLE: 'Jungle', MIDDLE: 'Mid', BOTTOM: 'ADC', UTILITY: 'Support' };
+/** The Rift at one minute: structures still standing, camps and pits, the ten players, and what happened in that minute. */
+function reviewSvg(G, m) {
+  const Y = (y) => MAP - y, own = G.side, pl = Object.fromEntries(G.players.map(([id, champ, team, role]) => [id, { id, champ, team, role }]));
+  const end = Math.floor(G.minutes), lost = G.win ? (own === 100 ? 200 : 100) : own;
+  // a structure is down from the minute its kill is reported; an inhibitor comes back 5 minutes later; the losing nexus falls at the end
+  const down = ([team, k, x, y]) => {
+    if (k === 'n') return team === lost && m >= end;
+    const b = G.builds.find((e) => e[1] !== 'plate' && Math.hypot(e[3] - x, e[4] - y) < 45);
+    return !!b && b[0] <= m + 0.001 && (k !== 'i' || m < b[0] + 5);
+  };
+  const structs = RIFT.map((st) => { const [team, k, x, y] = st, c = team === own ? 'own' : 'enemy', off = down(st) ? ' down' : '', sz = k === 'n' ? 30 : 20, name = k === 't' ? 'tower' : k === 'i' ? 'inhibitor' : 'nexus';
+    return k === 'i' ? `<circle class="st ${c}${off}" cx="${x}" cy="${Y(y)}" r="16"><title>${c === 'own' ? 'Your' : 'Enemy'} ${name}${off ? ', destroyed' : ''}</title></circle>`
+      : `<rect class="st ${c}${off}" x="${x - sz / 2}" y="${Y(y) - sz / 2}" width="${sz}" height="${sz}"${k === 'n' ? ` transform="rotate(45 ${x} ${Y(y)})"` : ''}><title>${c === 'own' ? 'Your' : 'Enemy'} ${name}${off ? ', destroyed' : ''}</title></rect>`; }).join('');
+  const camps = CAMPS.map(([n, x, y, k]) => `<circle class="camp ${k}" cx="${x}" cy="${Y(y)}" r="15"><title>${n}</title></circle>`).join('')
+    + SCUTTLES.map(([x, y]) => `<circle class="camp scuttle" cx="${x}" cy="${Y(y)}" r="12"><title>Scuttle crab</title></circle>`).join('')
+    + PITS.map(([n, x, y, l]) => `<g class="pit ${l === 'D' ? 'drake' : 'baron'}"><circle cx="${x}" cy="${Y(y)}" r="44"/><text x="${x}" y="${Y(y) + 14}" text-anchor="middle">${l}</text><title>${n} pit</title></g>`).join('');
+  const inMin = (t) => t > m - 1 && t <= m;
+  const kills = G.kills.filter((k) => inMin(k[0]));
+  const dead = new Set(kills.map((k) => k[2]));
+  const face = (id, x, y, cls = '') => { const p = pl[id]; return `<g class="pl ${p.team === own ? 'own' : 'enemy'}${id === G.me ? ' me' : ''} ${cls}" transform="translate(${x} ${Y(y)})"><clipPath id="rc-${G.id}-${id}-${cls || 'a'}"><circle r="42"/></clipPath><circle class="ring" r="48"/><image href="https://ddragon.leagueoflegends.com/cdn/${D.ddragon}/img/champion/${p.champ}.png" x="-42" y="-42" width="84" height="84" clip-path="url(#rc-${G.id}-${id}-${cls || 'a'})"/><title>${champName(p.champ)} · ${ROLE_NAME[p.role] || p.role}${p.team === own ? ', your team' : ', enemy team'}${id === G.me ? ' (you)' : ''}</title></g>`; };
+  const players = G.players.filter(([id]) => !dead.has(id)).map(([id]) => { const q = G.pos[id]?.[m]; return q ? face(id, q[0], q[1]) : ''; }).join('');
+  const deaths = kills.map(([t, killer, victim, , x, y]) => `${face(victim, x, y, 'died')}<path class="kx" d="M${x - 40} ${Y(y) - 40} L${x + 40} ${Y(y) + 40} M${x + 40} ${Y(y) - 40} L${x - 40} ${Y(y) + 40}"><title>${mmss(t)} · ${pl[killer] ? champName(pl[killer].champ) : 'Executed'} killed ${champName(pl[victim].champ)}</title></path>`).join('');
+  const objs = G.objs.filter((o) => inMin(o[0])).map(([t, mon, team, x, y]) => { const [l, n] = monsterOf(mon); return `<g class="taken ${team === own ? 'own' : 'enemy'}"><rect x="${x - 26}" y="${Y(y) - 26}" width="52" height="52" transform="rotate(45 ${x} ${Y(y)})"/><text x="${x}" y="${Y(y) + 11}" text-anchor="middle">${l}</text><title>${mmss(t)} · ${n}: ${team === own ? 'your team' : 'enemy team'}</title></g>`; }).join('');
+  const falls = G.builds.filter((b) => inMin(b[0])).map(([t, k, team, x, y]) => `<circle class="fall ${team === own ? 'own' : 'enemy'}" cx="${x}" cy="${Y(y)}" r="${k === 'plate' ? 18 : 30}"><title>${mmss(t)} · ${team === own ? 'your' : 'enemy'} ${k === 'plate' ? 'tower plate' : k} destroyed</title></circle>`).join('');
+  return `<image href="https://ddragon.leagueoflegends.com/cdn/${D.ddragon}/img/map/map11.png" x="-12" y="2" width="1499" height="1510" preserveAspectRatio="none"/>${camps}${structs}${falls}${objs}${players}${deaths}`;
+}
+/** What happened in one minute, in words, next to the map. */
+function reviewMinute(G, m) {
+  const own = G.side, pl = Object.fromEntries(G.players.map(([id, champ, team, role]) => [id, { champ, team, role }]));
+  const who = (id) => (pl[id] ? `<b class="${pl[id].team === own ? 'own' : 'enemy'}">${champName(pl[id].champ)}</b>${id === G.me ? ' (you)' : ''}` : 'a tower or minions');
+  const inMin = (t) => t > m - 1 && t <= m;
+  const rows = [
+    ...G.kills.filter((k) => inMin(k[0])).map(([t, killer, victim, assists, x, y]) => [t, `${who(killer)} killed ${who(victim)}${assists.length ? ` · with ${assists.map((a) => champName(pl[a]?.champ || '')).join(', ')}` : ''} <span class="muted">· ${zoneOf(x, y)}</span>`]),
+    ...G.objs.filter((o) => inMin(o[0])).map(([t, mon, team]) => [t, `${monsterOf(mon)[1]}: <b class="${team === own ? 'own' : 'enemy'}">${team === own ? 'your team' : 'enemy team'}</b>`]),
+    ...G.builds.filter((b) => inMin(b[0])).map(([t, k, team]) => [t, `${team === own ? 'Your' : 'Enemy'} ${k === 'plate' ? 'tower plate' : k} destroyed`]),
+  ].sort((a, b) => a[0] - b[0]);
+  const lead = G.lead[m];
+  return `<p class="rv-now"><b>Minute ${m}</b>${lead != null ? ` · your team <b class="${lead >= 0 ? 'up' : 'down'}">${lead >= 0 ? '+' : '−'}${Math.abs(lead).toLocaleString('en-GB')} gold</b>` : ''}</p>
+    ${rows.length ? `<ul class="rv-list">${rows.map(([t, r]) => `<li><span class="rv-t">${mmss(t)}</span><span>${r}</span></li>`).join('')}</ul>` : '<p class="small muted">Nothing happened in this minute: no kill, no objective, no tower.</p>'}`;
+}
+/** The gold lead along the game, with a tick for every kill and objective: the slider runs under it. */
+function reviewTrack(G) {
+  const n = G.lead.length, w = 1000, h = 70, x = (i) => (i * w) / Math.max(1, n - 1);
+  const top = Math.max(1000, ...G.lead.map(Math.abs)), y = (v) => h / 2 - (v / top) * (h / 2 - 4);
+  const area = `M0 ${h / 2} ${G.lead.map((v, i) => `L${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')} L${w} ${h / 2} Z`;
+  const own = G.side;
+  const ticks = [...G.kills.map(([t, killer]) => [t, (G.players.find((p) => p[0] === killer)?.[2] ?? 0) === own ? 'own' : 'enemy', 'k']), ...G.objs.map(([t, , team]) => [t, team === own ? 'own' : 'enemy', 'o'])]
+    .map(([t, c, k]) => `<line class="tk ${c} ${k}" x1="${x(t).toFixed(1)}" x2="${x(t).toFixed(1)}" y1="${c === 'own' ? 0 : h - (k === 'o' ? 22 : 12)}" y2="${c === 'own' ? (k === 'o' ? 22 : 12) : h}"/>`).join('');
+  return `<svg class="rv-track" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path class="lead" d="${area}"/><line class="zero" x1="0" x2="${w}" y1="${h / 2}" y2="${h / 2}"/>${ticks}<line class="cur" x1="0" x2="0" y1="0" y2="${h}"/></svg>`;
+}
+function reviewBlock(G, t, h) {
+  const start = Math.min(G.lead.length - 1, 14);
+  const sum = t?.map?.length ? mapSummary(mapEvents(t), h.role, t.side) : null;
+  return `<section class="card tech review" id="rv-${G.id}"><header class="panel-head"><div><p class="eyebrow">Review the game · minute by minute</p><h3>The Rift, both teams</h3></div><span class="small muted">you played on the ${G.side === 200 ? 'red side, top right' : 'blue side, bottom left'}</span></header>
+    <div class="rv-grid"><div class="rv-map"><svg viewBox="0 0 ${MAP} ${MAP}" role="img" aria-label="The Rift at the chosen minute">${reviewSvg(G, start)}</svg></div>
+      <div class="rv-side"><div class="rv-minute">${reviewMinute(G, start)}</div>
+        ${sum ? `<p class="small rv-lane">Lane phase: ${sum.away.length} kill${sum.away.length === 1 ? '' : 's'} or assist${sum.away.length === 1 ? '' : 's'} away from your lane before minute 14 · ${sum.deaths.length} death${sum.deaths.length === 1 ? '' : 's'}${sum.ganked ? `, ${sum.ganked} with the enemy jungler` : ''}.</p>` : ''}
+        <p class="small muted">One position a minute, as Riot records it; kills, objectives and towers at their exact second. Ringed blue: your team; red: the enemy; gold: you.</p></div></div>
+    <div class="rv-time">${reviewTrack(G)}<div class="rv-ctl"><button type="button" class="btn small" data-rvplay aria-label="Play">▶ Play</button><input type="range" min="0" max="${G.lead.length - 1}" value="${start}" data-rvmin aria-label="Minute"><span class="rv-mlab">${start}'</span></div></div></section>`;
+}
+function bindReview(G) {
+  const box = document.getElementById(`rv-${G.id}`);
+  if (!box) return;
+  const svg = box.querySelector('.rv-map svg'), side = box.querySelector('.rv-minute'), range = box.querySelector('[data-rvmin]'), lab = box.querySelector('.rv-mlab'), cur = box.querySelector('.rv-track .cur'), play = box.querySelector('[data-rvplay]');
+  const n = G.lead.length;
+  const show = (m) => { svg.innerHTML = reviewSvg(G, m); side.innerHTML = reviewMinute(G, m); lab.textContent = `${m}'`; const x = (m * 1000) / Math.max(1, n - 1); cur.setAttribute('x1', x); cur.setAttribute('x2', x); };
+  let timer = null;
+  const stop = () => { clearInterval(timer); timer = null; play.textContent = '▶ Play'; };
+  range.oninput = () => { stop(); show(Number(range.value)); };
+  play.onclick = () => {
+    if (timer) return stop();
+    if (Number(range.value) >= n - 1) range.value = 0;
+    play.textContent = '❚❚ Pause';
+    timer = setInterval(() => { const m = Number(range.value) + 1; if (m > n - 1) return stop(); range.value = m; show(m); if (!document.body.contains(box)) stop(); }, 1000);
+  };
+  show(Number(range.value));
+}
 function meanCurve(list, key, min = 3) {
   const out = [];
   for (let i = 0; ; i++) { const xs = list.map((c) => c[key]?.[i]).filter((v) => v != null); if (xs.length < min) break; out.push(Math.round(avg(xs))); }
@@ -2257,7 +2451,8 @@ function viewGame(id, matchId) {
   ${gr ? `<section class="rep-grade"><b class="grade big g-${gr.letter}">${gr.letter}</b><div><strong>${esc(gr.decided)}</strong><small>Grade ${gr.letter}: ${gr.own != null ? `${signed(gr.own)} on your usual ${pairLabel(pair)}` : 'too few games for your usual'}${gr.vsTier != null ? `, ${signed(gr.vsTier)} on the average ${tn} ${cn}` : ''}. S is the best, D the worst.</small></div></section>` : ''}
   ${h.opp ? matchupLine(pair, h.opp) : ''}
   ${t ? `<section class="rep-top">
-    <div class="rep-chart"><h3>Gold gap to ${h.opp ? champName(h.opp) : 'your lane opponent'}, minute by minute</h3><div class="curve-legend">${series('diff').map((s) => `<span><i class="k-${s.cls}"></i>${s.name}</span>`).join('')}<span><i class="k-death"></i>your deaths</span></div>${lineChart(`rep-${h.id}`, 'diff', series('diff'), t.deaths)}</div>
+    <div class="rep-chart"><h3>Gold gap to ${h.opp ? champName(h.opp) : 'your lane opponent'}, minute by minute</h3><div class="curve-legend">${series('diff').map((s) => `<span><i class="k-${s.cls}"></i>${s.name}</span>`).join('')}<span><i class="k-death"></i>your deaths</span></div>${lineChart(`rep-${h.id}`, 'diff', series('diff'), t.deaths)}
+      ${t.cur.xpd?.length ? `<h3>XP gap to ${h.opp ? champName(h.opp) : 'your lane opponent'}, minute by minute</h3>${lineChart(`rep-${h.id}-xpd`, 'xpd', series('xpd'), t.deaths)}` : ''}</div>
     <div class="tiles">
       ${tile('CS gap at 10', t.at[10]?.[0], a?.at[10]?.[0], (v) => sgn(v), (v, r) => v < r - 4)}
       ${tile('XP gap at 10', t.at[10]?.[2], a?.at[10]?.[2], (v) => sgn(v), (v, r) => v < r - 150)}
@@ -2273,14 +2468,16 @@ function viewGame(id, matchId) {
     ${gm.map(mrow).join('')}
     ${worse[0] ? `<p class="small tipline"><b>${worse[0].fix}:</b> ${worse[0].tip}</p>` : ''}
     <p class="small muted">The tick is your usual ${pairLabel(pair)} over ${usualGames.length} other games.</p></section>
-  ${t ? `<section class="rep-two">${teamsBlock(t, h)}${buildBlock(t)}</section>
+  ${t ? `<div id="rv-slot">${mapBlock(t, h)}</div><section class="rep-two">${teamsBlock(t, h)}${buildBlock(t)}</section>
   <details class="card tech allch"><summary><h3>More curves: gold, farm, damage</h3></summary><div class="curves">${['gold', 'cs', 'dmg'].map((k) => (t.cur[k]?.length ? lineChart(`rep-${h.id}-${k}`, k, series(k), t.deaths) : '')).join('')}</div></details>` : ''}
   ${g?.results ? `<section class="card goldcard"><h3>Your contest score · ${g.win ? 'win' : 'loss'} ${resultPts(g.win)} + 3 challenges = ${g.total} points</h3><div class="tablewrap"><table class="num"><tr><th>Pick</th><th>You</th><th>Line</th><th>Points</th></tr>${g.results.map((r) => `<tr><td>${CH[r.id].name} <span class="tag ${r.level}">${r.level}</span></td><td>${fmt(r.id, r.value)}</td><td>${fmt(r.id, r.hi)}</td><td>${r.full ? `<b>${r.points}</b> made it` : r.frac > 0 ? `<b>${r.points}</b> (${Math.round(r.frac * 100)}% of the way)` : '0'}</td></tr>`).join('')}</table></div></section>` : ''}
   <details class="card tech allch"><summary><h3>Challenges, for contests <span class="small muted">· position ${Math.round(base.mean)} among ${tn} players · ${rows.length} challenges</span></h3></summary><div class="tablewrap"><table class="num"><tr><th>Challenge</th><th>You</th><th>Tier typical</th><th>Position</th><th>Your usual</th><th>Contest level</th></tr>
   ${rows.map((cid) => { const uv = usualOfCh(cid); return `<tr><td>${CH[cid].name}</td><td><b>${fmt(cid, base.v[cid])}</b></td><td class="muted">${fmt(cid, valueAt(pair, cid, base.win, 0.5, tier))}</td><td><span class="posbar"><i style="width:${base.pos[cid]}%"></i></span> ${base.pos[cid]}</td><td>${uv == null ? '<span class="muted">few games</span>' : Math.round(uv)}</td><td>${reach[cid] ? `<span class="tag ${reach[cid]}">${reach[cid]} ✓</span>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</table></div>
   <p class="small muted">Contest level: the highest level of each challenge this game would have made in a contest. ${rl('challenges')}${g?.imp ? ` Training contest score: ${signed(g.imp.total)}.` : ''}</p></details>
   ${keyPreview(pair, h.opp)}`;
-  bindCurves();
+  bindCurves(); bindMaps();
+  // the minute-by-minute review, from the game's own file: it takes the place of the event map once it is in
+  if (t) loadReview(h.id).then((G) => { const slot = document.getElementById('rv-slot'); if (!G || !slot || !G.lead?.length) return; slot.innerHTML = reviewBlock(G, t, h); bindReview(G); });
 }
 /** Where you stand in a training contest, and how much you need to move up. */
 function standing(c) {
