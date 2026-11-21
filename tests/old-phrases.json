@@ -120,6 +120,18 @@
       "phrase": "no shared accounts; a ban hits",
       "since": "2026-11-18",
       "now": "no shared accounts, no duo; anyone found abusing is banned without notice"
+    },
+    {
+      "rule": 8.5,
+      "phrase": "earned only by improving",
+      "since": "2026-11-21",
+      "now": "won by finishing among the best of a training contest, lost by finishing among the worst"
+    },
+    {
+      "rule": 8.5,
+      "phrase": "Points are earned only",
+      "since": "2026-11-21",
+      "now": "Points are never bought"
     }
   ]
 }

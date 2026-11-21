@@ -44,7 +44,7 @@ const TERMS = {
   unplayed: 'An entry not played by the next day\'s check is cancelled.',
   cancel: 'Cancelling runs a check first: a valid game found still counts; otherwise the entry is cancelled at once.',
   trainingContest: `Training contest: free, ${SEATS} players, each in their own game. Whoever improves most on their usual game with that champion and role ranks highest.`,
-  points: 'Progress points are earned only by improving: never bought, never money. They open coaching, merch and team try-outs.',
+  points: 'Progress points are won by finishing among the best of a training contest and lost by finishing among the worst: never bought, never money. They open coaching, merch and team try-outs.',
   prizeContest: `Prize contest: Rising, Pro or Elite, ${SEATS} players, each in their own game.`,
   ownTier: 'Every player is judged on the thresholds of their own rank tier: an Iron and a Diamond compete on equal terms.',
   ticket: 'The ticket is the price to take part, not a sure win. It is taken only when your game enters a contest.',
@@ -178,7 +178,8 @@ function yValue(pair, id, key, x) {
 function challengeText(pair, id, level, tier) {
   const x = lineOf(pair, id, level, true, tier), xl = lineOf(pair, id, level, false, tier);
   return CH[id].text.replace('{x}', `<b>${fmt(id, x)}</b>`).replace('{xl}', `<b>${fmt(id, xl)}</b>`)
-    .replace('{y10}', yValue(pair, id, 'y10', x) ?? '—').replace('{y20}', yValue(pair, id, 'y20', x) ?? '—').replace('{y30}', yValue(pair, id, 'y30', x) ?? '—');
+    .replace('{y10}', yValue(pair, id, 'y10', x) ?? '—').replace('{y20}', yValue(pair, id, 'y20', x) ?? '—').replace('{y30}', yValue(pair, id, 'y30', x) ?? '—')
+    .replace(/\b1 (kills|deaths|assists)\b/g, (_, w) => `1 ${w.slice(0, -1)}`);
 }
 const euro = (c) => `${(c / 100).toFixed(c % 100 ? 2 : 0)} €`;
 const euro2 = (c) => `${(c / 100).toFixed(2)} €`;
@@ -1999,7 +2000,7 @@ function progressPanel() {
       <div class="tp-road"><div class="tp-rail"><i style="width:${at(bal)}"></i><span class="tp-you" style="left:${at(bal)}" title="You: ${bal.toFixed(1)}"></span></div>
         ${REWARDS.map(([id, name, cost], i) => `<button class="tp-node ${bal >= cost ? 'ok' : ''} ${i % 2 ? 'low' : ''}" style="left:${at(cost)}" data-spend="${id}" ${bal >= cost ? '' : 'disabled'} title="${esc(name)} · ${cost} points${bal >= cost ? ' · click to use' : ` · ${round1(cost - bal)} more to go`}"><i>${cost}</i><span>${REWARD_SHORT[id]}</span></button>`).join('')}</div>
       <div class="tp-last"><span>Last games</span>${last.map((s) => `<a class="pg-step ${s.pts > 0 ? 'up' : s.pts < 0 ? 'down' : ''}" href="#/contests/t/${s.c.id}" title="Your improvement ${signed(s.e.total)} · contest average ${signed(s.field)}${s.c.state === 'open' ? ' · provisional' : ''}">${icon(splitPair(s.e.pair).champ)}<b>${s.pts > 0 ? '+' : s.pts < 0 ? '−' : '±'}${Math.abs(s.pts).toFixed(1)}</b></a>`).join('') || '<span class="small muted">No training contest game yet.</span>'}</div>
-      <details class="pg-how"><summary>How it moves</summary><p class="small">Every ranked game you play is compared with your usual game with the same champion and role, over your whole history. A game you enter in a training contest adds half of your improvement and half of how much you improved above or below the other 19. A usual game moves the bar by about one point; a very good or very bad one by one and a half at most. Rewards spend it; it never goes below zero. Points are earned only, never bought. <span class="muted">Demo numbers: the other players are simulated.</span></p></details>
+      <details class="pg-how"><summary>How it moves</summary><p class="small">Every ranked game you play is compared with your usual game with the same champion and role, over your whole history. A game you enter in a training contest adds half of your improvement and half of how much you improved above or below the other 19. A usual game moves the bar by about one point; a very good or very bad one by one and a half at most. Rewards spend it; it never goes below zero. Points are never bought. <span class="muted">Demo numbers: the other players are simulated.</span></p></details>
     </div>
   </section>`;
 }
@@ -2707,12 +2708,12 @@ function viewSupport() {
 }
 /** How the numbers are made: the same words on the entry page and in the rules. */
 function dataList() {
-  return `<ul><li><b>Where the numbers come from:</b> public ranked solo games on EUW, from Iron to Master, read through Riot's official API after they end: ${D.facts.games.toLocaleString('en-GB')} games, 48,659 of them with the minute-by-minute timeline some challenges need. Nothing is read during a game.</li>
+  return `<ul><li><b>Where the numbers come from:</b> public ranked solo games on 15 servers, from Iron to Challenger, read through Riot's official API after they end: ${D.facts.games.toLocaleString('en-GB')} games, 130,583 of them with the minute-by-minute timeline some challenges need. Nothing is read during a game.</li>
   <li><b>Lines per champion, role and rank tier:</b> each champion and role has its own lines, and each rank tier moves them by a correction measured role by role. A line sits where the average player of that tier reaches it in about 60% of games (easy), 35% (medium) or 15% (hard).</li>
   <li><b>Tested before use:</b> lines are fixed on older games and tested on newer ones. A challenge is offered only if it happens as often as declared, whether the game is won or lost, and better players make it happen more often.</li>
   <li><b>Your games never set your lines:</b> they are computed on everyone's games, never on yours.</li></ul>`;
 }
-const dataProof = () => `On newer games the challenges happened 60.1%, 35.1% and 15.0% of the time. A player's results on odd and even games correlate ${D.facts.follow.toFixed(2)}; winning alone, ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most ×${D.facts.edgeChampion.toFixed(2)}.`;
+const dataProof = () => `On newer games the challenges happened 59.9%, 35.0% and 15.1% of the time. A player's results on odd and even games correlate ${D.facts.follow.toFixed(2)}; winning alone, ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most ×${D.facts.edgeChampion.toFixed(2)}.`;
 /** The rules, version 1: the English text of the rulebook (the Regolamento tab of "Skybreak: regole e prove"),
  *  article by article. Change the rulebook first, then this text; old wordings go in tests/old-phrases.json. */
 const RULES = [
@@ -2734,10 +2735,10 @@ const RULES = [
   <p>4.5 <b>Window scoring.</b> If you reach the threshold of the chosen level, you get all its points. At the threshold of the level below you get 0 points, and between the two thresholds the points grow in proportion up to the maximum. Below the threshold of the level below you get 0. You never get more points than the chosen level. For the easy level, the threshold below is a lower threshold computed the same way.</p>
   <p>4.6 <b>The score of a game in a prize contest</b> is its result plus the 3 chosen challenges: ${RESULT_PTS.win} points for a win, ${RESULT_PTS.loss} for a loss, plus the points of the challenges, at most ${POINTS.hard * 3}. The maximum is therefore ${RESULT_PTS.win + POINTS.hard * 3} points.</p>
   <div class="tablewrap"><table><tr><th>Challenge</th><th>What it measures</th></tr>${D.challenges.map((c) => `<tr><td><b>${c.name}</b><br><span class="small muted">${c.family}</span></td><td class="small">${c.text.replace(/\{x\}|\{xl\}/g, '<i>threshold</i>').replace(/\{y\d0\}/g, '…')}</td></tr>`).join('')}</table></div>`],
-  ['method', 'How the numbers are made', `<p>5.1 The numbers come from public ranked SoloQ games on EUW, from Iron to Master, read through Riot's official API after they have ended. During a game Skybreak reads nothing.</p>
-  <p>5.2 The challenge thresholds are computed on ${D.facts.games.toLocaleString('en-GB')} games, 48,659 of them with the minute-by-minute timeline that some challenges need. Today the number of games is limited by the developer key of Riot's API: with many more games the thresholds would be even more precise. The champion numbers in Intelligence use a larger set, which the site keeps up to date.</p>
+  ['method', 'How the numbers are made', `<p>5.1 The numbers come from public ranked SoloQ games on 15 servers, from Iron to Challenger, read through Riot's official API after they have ended. During a game Skybreak reads nothing.</p>
+  <p>5.2 The challenge thresholds are computed on ${D.facts.games.toLocaleString('en-GB')} games, 130,583 of them with the minute-by-minute timeline that some challenges need. Today the number of games is limited by the developer key of Riot's API: with many more games the thresholds would be even more precise. The champion numbers in Intelligence come from the same collections of games, which the site keeps up to date.</p>
   <p>5.3 Every champion in every role has its own thresholds, and each rank tier moves them with a correction measured role by role.</p>
-  <p>5.4 Thresholds are set on the older games and tested on the newer ones. On the newer games the challenges succeeded 60.1%, 35.1% and 15.0% of the time. To check that a challenge depends on skill, the games of every player with at least 30 games in the data are split into odd and even: the results in the two halves correlate ${D.facts.follow.toFixed(2)}, while winning alone correlates ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most an advantage of ${D.facts.edgeChampion.toFixed(2)} times.</p>`],
+  <p>5.4 Thresholds are set on the older games and tested on the newer ones. On the newer games the challenges succeeded 59.9%, 35.0% and 15.1% of the time. To check that a challenge depends on skill, the games of every player with at least 30 games in the data are split into odd and even: the results in the two halves correlate ${D.facts.follow.toFixed(2)}, while winning alone correlates ${D.facts.wins.toFixed(2)}. Picking the luckiest champion gives at most an advantage of ${D.facts.edgeChampion.toFixed(2)} times.</p>`],
   ['signups', 'Entering, playing, checks and cancelling', `<p>This article applies to both training contests and prize contests.</p>
   <p>6.1 <b>Entering.</b> You enter your next game before playing it. In prize contests you also choose the champion, the role and the 3 challenges with their level. After entering, nothing can be changed.</p>
   <p>6.2 <b>The contest game</b> is the first ranked SoloQ game started after entering. In prize contests it must be played with exactly the chosen champion and role.</p>
@@ -2755,7 +2756,7 @@ const RULES = [
   <p>8.2 Nothing is chosen: your next SoloQ game counts, with any champion.</p>
   <p>8.3 Each game is compared with the usual game of whoever played it, with that champion and role. Whoever improves most ranks highest.</p>
   <p>8.4 The improvement number counts only inside that contest.</p>
-  <p>8.5 Training contests award <b>progress points</b>. They are earned only by improving: they are never bought and never become money.</p>
+  <p>8.5 Training contests award and take away <b>progress points</b>. Players who finish among the best of the contest win them, and those who finish among the worst lose some; the balance never goes below zero. They are never bought and never become money.</p>
   <p>8.6 Progress points open coaching, merch and try-outs with a team. Using them requires a verified account.</p>`],
   ['contests', 'Prize contests', `<p>9.1 <b>The three contests.</b> ${TICKETS.map((t) => `${CONTEST_NAME[t]}, with a ${euro(t)} ticket`).join('; ')}. The ticket is the price to take part: it is not a sure win. They require a verified account and the 3 challenges chosen when entering.</p>
   <p>9.2 <b>Thresholds of your own rank tier.</b> Each player is judged on the thresholds of their own rank tier: an Iron and a Diamond compete in the same contest on equal terms.</p>
@@ -2776,7 +2777,7 @@ function viewRules(sec) {
   <details class="card rules-short"><summary><b>The rules in short</b> <span class="small muted">· one sentence per system, the same on every page</span></summary><ul>${Object.values(TERMS).map((t) => `<li>${t}</li>`).join('')}</ul></details>
   <div class="rules-body"><nav class="toc" aria-label="Sections">${RULES.map(([id, n], i) => `<a href="#/rules/${id}" class="${id === sec ? 'on' : ''}">${i < RULES.length - 1 ? `<span>${i + 1}</span>` : '<span>·</span>'}${n}</a>`).join('')}</nav>
   <div class="rules-text">${RULES.map(([id, n, body], i) => `<section id="r-${id}" class="${id === sec ? 'hl' : ''}"><h2>${i < RULES.length - 1 ? `${i + 1}. ` : ''}${n}</h2>${body}</section>`).join('')}</div></div></div>`;
-  if (sec && document.getElementById(`r-${sec}`)) requestAnimationFrame(() => document.getElementById(`r-${sec}`).scrollIntoView({ block: 'start' }));
+  if (sec && document.getElementById(`r-${sec}`)) requestAnimationFrame(() => document.getElementById(`r-${sec}`)?.scrollIntoView({ block: 'start' }));
 }
 
 // ---------- router ----------
