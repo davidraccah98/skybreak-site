@@ -2563,13 +2563,14 @@ function viewLobby(arg = '') {
   const again = () => { if ((location.hash || '').startsWith('#/contests')) { const y = scrollY; viewLobby(arg); scrollTo(0, y); } };
   withTraining(again); withStats(again); syncContests();
   app.innerHTML = contestsBlock('area');
-  if (arg === 'prize') { const el = $('.hc-two'); if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'start' })); }
+  if (arg === 'prize') { const el = $('.hc-card.prize') || $('.hc-two'); if (el) { el.classList.add('hl'); requestAnimationFrame(() => el.scrollIntoView({ block: 'start' })); } }
 }
 let joinDraft = null;
 function viewJoin(ticket) {
   if (needAccount()) return;
   if (!TICKETS.includes(ticket)) { location.hash = '#/contests'; return; }
-  if (!S.verified) { S.afterVerify = `#/join/${ticket}`; location.hash = '#/verify'; return; }
+  // On the review path the page opens unverified so the reviewer sees it; entering still asks for verification.
+  if (!S.verified && S.tour == null) { S.afterVerify = `#/join/${ticket}`; location.hash = '#/verify'; return; }
   const tier = P().tier;
   if (!joinDraft) joinDraft = newDraft('contest', ticket); else joinDraft.ticket = ticket; // changing ticket keeps the champion and the challenges
   const d = joinDraft;
@@ -2604,6 +2605,7 @@ function viewJoin(ticket) {
   }));
   app.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { d.picks.splice(Number(b.dataset.rm), 1); keep(); }));
   $('#lock').onclick = () => {
+    if (!S.verified) { S.afterVerify = `#/join/${ticket}`; location.hash = '#/verify'; return; }
     if (d.picks.length !== 3 || ticket > S.balance) return;
     S.signups.push({ id: uid('S'), kind: 'contest', ticket, pair: d.pair, picks: d.picks.map((x) => ({ ...x })), at: S.now, status: 'waiting' });
     joinDraft = null; save(); toast('Entered. Nothing is charged until your game enters the contest: now play a solo queue game, then check your games.');
@@ -2784,18 +2786,18 @@ function viewRules(sec) {
 /** The review path for Riot: optional, six stops on the real screens. A bar that never covers the page;
  *  Back, Next and close at every stop, and the reviewer can wander off and come back to the stop. */
 const TOUR = [
-  { to: () => '#/home', name: 'Home', title: 'A player\'s own games, read after they end',
-    text: `${TERMS.during} ${TERMS.data}` },
-  { to: () => { const g = S.games.filter((x) => x.analysed).slice(-1)[0]; return g ? `#/train/game/${g.id}` : '#/train'; }, name: 'Training', title: 'One game against the average of the same rank tier',
-    text: `${TERMS.training} Rank tier only: no MMR and no player rating.` },
-  { to: () => '#/intel', name: 'Intelligence', title: 'The numbers of every champion',
-    text: 'Builds, matchups and tier lists by role and rank tier, from public ranked games. To study the game; nothing here is advice for a contest.' },
-  { to: () => '#/contests/training', name: 'Training contest', title: 'Free: 20 players, each in their own game',
-    text: `${TERMS.trainingContest} ${TERMS.points}` },
-  { to: () => '#/contests/prize', name: 'Prize contests', title: 'A ticket to compete, prizes apart',
-    text: `${TERMS.prizeContest} ${TERMS.ticket} ${TERMS.ownTier} ${TERMS.prizes} Verified accounts only; play money in this demo.` },
+  { to: () => '#/home', name: 'Home', title: 'Home: where every visit starts',
+    text: 'Home is where you find the news, the champions you have played best lately with what you do better than players of your rank tier, and the way into every other area: Intelligence, Training and the contests.' },
+  { to: () => '#/intel/Yone/MIDDLE', name: 'Intelligence', title: 'Intelligence: everything about a champion',
+    text: 'For every champion and role: win, pick and ban rate, runes, summoner spells, skill order, the items and the order they are built in, the lane opponents it beats and loses to, its best teammates, and its win rate by game length, rank tier and server. Choose the whole world or one server: the page shows the builds a server plays differently, and the Patches tab shows how the champion changed.' },
+  { to: () => '#/train', name: 'Training', title: 'Training: what you do well and badly',
+    text: 'Here you see, champion by champion, what you do well and badly compared with the average player of your rank tier on the same champion and role: what to improve first, where you fight and die on the map, your hardest matchups, how you die early, and your runes and build against theirs. Below is your match history: every ranked game analysed minute by minute, with the lane against your opponent, your build and the map of the game.' },
+  { to: () => '#/contests/training', name: 'Training contest', title: 'Training contest: free, every game counts',
+    text: `A training contest is free and gathers ${SEATS} players. Each plays their own solo queue game, whenever they want, with any champion. Your game is compared with your usual game on that champion and role, and whoever improves most ranks highest. Finish among the best and you win progress points, among the worst and you lose some: the list shows +x or −x for every contest you played, and the bar adds them up. The bar never goes below zero and opens coach reviews, merch, coaching and team try-outs. Points are never bought and never become money.` },
+  { to: () => '#/join/500', name: 'Prize contest', title: 'Prize contest: champion, role and 3 challenges',
+    text: `Choose a contest (Rising 2 €, Pro 5 €, Elite 10 €), then your champion and role, then 3 challenges at easy, medium or hard level, worth 10, 20 or 30 points. Every challenge has a threshold set by the average player of your rank tier on that champion and role. Enter before you play: once entered, nothing changes. When your game ends it joins a contest of ${SEATS}: ${RESULT_PTS.win} points for a win, ${RESULT_PTS.loss} for a loss, plus the challenges you completed. ${TERMS.prizes} ${TERMS.ticket}` },
   { to: () => { const c = Object.values(S.contests).filter((x) => x.kind !== 'imp' && x.state === 'done' && x.entries.some((e) => e.you)).sort((a, b) => b.closedAt - a.closedAt)[0]; return c ? `#/contest/${c.id}` : '#/mine/finished'; }, name: 'A finished contest', title: 'The final ranking',
-    text: `${TERMS.score} ${TERMS.riotId} Players, time and money are simulated in the demo; the games and thresholds are real.` },
+    text: `Every row is one player's game: the result, the 3 challenges with their level, the points and the prize. ${TERMS.score} ${TERMS.riotId} Players, time and money are simulated in the demo; the games and thresholds are real.` },
 ];
 function tourBar() {
   let el = $('#tour');
