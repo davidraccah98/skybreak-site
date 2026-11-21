@@ -1273,6 +1273,16 @@
   .inow { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border: 1px solid var(--accent); border-radius: 999px; color: var(--ink); text-decoration: none; font-size: 13px; } .inow .champ { width: 26px; height: 26px; border-radius: 50%; } .inow span[aria-hidden] { color: var(--muted); font-size: 11px; } .inow:hover span[aria-hidden] { color: var(--bad); }
   .inow.opp { border-color: #8a7fd0; } .inow .vs { color: var(--muted); font-size: 11px; text-transform: uppercase; padding-left: 6px; }
   .inow-roles { display: inline-flex; gap: 4px; } .inow-roles .chip { padding: 4px 9px; }
+  .inow-tier select:disabled { opacity: .45; }
+  .ifilters { display: flex; gap: var(--s3); flex-wrap: wrap; align-items: flex-start; } .ifilters .chips { flex: 1 1 320px; } .chip:disabled { opacity: .4; cursor: not-allowed; }
+  .chip.small { padding: 2px 7px; font-size: 11px; }
+  .idiff-flag { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0 0; font-size: 12px; color: var(--warn); }
+  .idiff-mark { display: block; color: var(--warn); font-size: 11px; font-weight: 600; }
+  .idiff-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 80px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .idiff-row.on { background: color-mix(in srgb, var(--warn) 8%, transparent); }
+  .idiff-row > span small { display: block; color: var(--muted); font-size: 11px; } .idiff-row > small { text-align: right; }
+  .idiff-row .iname { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; } .idiff-row .iname i { color: var(--muted); font-style: normal; }
+  @media (max-width: 620px) { .idiff-row { grid-template-columns: 52px minmax(0, 1fr); } .idiff-row > small { grid-column: 2; text-align: left; } .idiff-world { grid-column: 2; } }
   .inow-tier select { padding: 6px 8px; border: 1px solid var(--line2); border-radius: var(--r2); background: var(--panel2); color: var(--ink); font: inherit; font-size: 13px; }
   body[data-route="intel"] main > .inav { position: sticky; top: 0; z-index: 7; }
   .istart.one { display: block; } .ichead .ichead-main h2 { font-size: 26px; }

@@ -1070,7 +1070,47 @@ const ALL_TIERS = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'D
 let intel = { pair: null, games: 25, role: '', sRole: '', sTier: null, sort: 'n', dir: -1, q: '', open: null, shown: 40 };
 // Intelligence is the game, not you: pick a champion, a role, an opponent and a tier group, and see everything the
 // lab's matches and timelines say (app/intel/, built by apps/lab/src/intel-data.ts). Nothing personal here.
-let intelSel = { champ: null, role: null, opp: null, group: 'ALL', q: '', oq: '' };
+let intelSel = { champ: null, role: null, opp: null, group: 'ALL', server: 'ALL', q: '', oq: '' };
+// Servers: the world by default, the leagues split on the world only; a server is every league together.
+const SERVER_FULL = { EUW: 'Europe West', EUNE: 'Europe Nordic & East', TR: 'Turkey', RU: 'Russia', ME: 'Middle East', NA: 'North America', BR: 'Brazil', LAN: 'Latin America North', LAS: 'Latin America South', KR: 'Korea', JP: 'Japan', OCE: 'Oceania', SEA: 'Southeast Asia', TW: 'Taiwan', VN: 'Vietnam' };
+const gKey = () => (intelSel.server !== 'ALL' ? `@${intelSel.server}` : intelSel.group);
+const gName = () => (intelSel.server !== 'ALL' ? `${SERVER_FULL[intelSel.server] || intelSel.server} · every league` : `World · ${GROUP_NAMES[intelSel.group]}`);
+const banOf = (c) => (intelSel.server !== 'ALL' ? intelIndex.bansBy?.[intelSel.server]?.[c] : intelIndex.bans[c]) ?? 0;
+const serverList = () => Object.keys(intelIndex?.servers || {});
+const serverSelect = () => `<label class="inow-tier"><span class="sr">Server</span><select id="iserver"><option value="ALL">World · every server</option>${serverList().map((x) => `<option value="${x}" ${x === intelSel.server ? 'selected' : ''}>${x} · ${SERVER_FULL[x] || x}</option>`).join('')}</select></label>`;
+const leagueSelect = () => `<label class="inow-tier"><span class="sr">League</span><select id="igroup" ${intelSel.server !== 'ALL' ? 'disabled title="Leagues are split on the whole world only"' : ''}>${Object.entries(GROUP_NAMES).map(([g, n]) => `<option value="${g}" ${g === intelSel.group && intelSel.server === 'ALL' ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
+/** Where a server builds this champion differently from the world: [server, kind, its choice, its share, world's choice, world's share, share of world's choice there, games]. */
+const diffsOf = (pair) => intelIndex?.diffs?.[pair] || [];
+const diffServers = (pair) => [...new Set(diffsOf(pair).map((d) => d[0]))];
+function diffWhat(d) {
+  const [, kind, key, , wkey] = d;
+  const spells = (k) => String(k).split('.').map((x) => intelIndex.spells[x]?.[0] || x).join(' + ');
+  const path = (k) => String(k).split('.').map((x) => intelIndex.items[x]?.[0] || x).join(' › ');
+  if (kind === 'keystone') return [intelIndex.runes[key] || key, intelIndex.runes[wkey] || wkey, 'Keystone'];
+  if (kind === 'spells') return [spells(key), spells(wkey), 'Summoner spells'];
+  if (kind === 'path') return [path(key), path(wkey), 'First three items'];
+  return [intelIndex.items[key]?.[0] || key, null, 'Finished item'];
+}
+function diffIcons(d) {
+  const [, kind, key, , wkey] = d;
+  const k = (x) => String(x).split('.');
+  if (kind === 'keystone') return [runeIcon(key), runeIcon(wkey)];
+  if (kind === 'spells') return [k(key).map(spellIcon).join(''), k(wkey).map(spellIcon).join('')];
+  if (kind === 'path') return [k(key).map((x) => iItem(x)).join('<i>›</i>'), k(wkey).map((x) => iItem(x)).join('<i>›</i>')];
+  return [iItem(key), ''];
+}
+function diffSection(pair) {
+  const ds = diffsOf(pair);
+  if (!ds.length) return '';
+  const rows = ds.map((d) => {
+    const [sv, kind, , sh, , wsh, there, n] = d;
+    const [mine, world, label] = diffWhat(d), [mi, wi] = diffIcons(d);
+    const show = (ic, name) => (kind === 'path' ? `<span class="ipath" title="${esc(name)}">${ic}</span>` : `${ic}${esc(name)}`);
+    const worldSide = kind === 'item' ? `<span class="iname">${show(mi, mine)} <b>${pct(wsh)}</b></span>` : `<span class="iname">${show(wi, world)} <b>${pct(wsh)}</b></span>${there != null ? `<small class="muted">${pct(there)} on ${sv}</small>` : ''}`;
+    return `<div class="idiff-row${intelSel.server === sv ? ' on' : ''}"><button class="chip" data-iserver="${sv}" title="Show ${SERVER_FULL[sv] || sv}">${sv}</button><span class="idiff-what"><small>${label} on ${sv}</small><span class="iname">${show(mi, mine)} <b>${pct(sh)}</b></span></span><span class="idiff-world"><small>World</small>${worldSide}</span><small class="muted">${n.toLocaleString('en-GB')} games</small></div>`;
+  }).join('');
+  return `<section class="icard wide idiff"><h3>Built differently on some servers</h3><p class="small muted">Where the most played choice on a server is not the world's, and leads the world's choice there by 10 points or more. A finished item: one of the server's three most built, built 15 points more often than in the world. Servers with 150 games of this champion and role or more.</p>${rows}</section>`;
+}
 const iItem = (id, cls = 'itm') => { const it = intelIndex?.items?.[id]; return `<img class="${cls}" alt="${esc(it?.[0] || '')}" title="${esc(it?.[0] || '')}" loading="lazy" src="https://ddragon.leagueoflegends.com/cdn/${D.ddragon}/img/item/${id}.png" onerror="this.style.visibility='hidden'">`; };
 const iName = (id) => esc(intelIndex?.items?.[id]?.[0] || `Item ${id}`);
 const wrCls = (w) => (w >= 0.53 ? 'up' : w <= 0.47 ? 'down' : '');
@@ -1112,7 +1152,7 @@ function intelBar(cur = {}) {
       <a class="inow me" href="#/intel" title="All champions">${icon(c)}<b>${champName(c)}</b><span aria-hidden="true">✕</span></a>
       <span class="inow-roles">${roles.map((x) => `<a class="chip ${x === r ? 'on' : ''}" href="#/intel/${enc(c)}/${x}${o ? `/${o === true ? 'counters' : enc(o)}` : ''}">${ROLES[x]}</a>`).join('')}</span>
       ${o && o !== true ? `<a class="inow opp" href="#/intel/${enc(c)}/${r}/counters" title="Any opponent"><span class="vs">vs</span>${icon(o)}<b>${champName(o)}</b><span aria-hidden="true">✕</span></a>` : ''}
-      <label class="inow-tier"><span class="sr">Tier</span><select id="igroup">${Object.entries(GROUP_NAMES).map(([g, n]) => `<option value="${g}" ${g === intelSel.group ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      ${serverSelect()}${leagueSelect()}
     </div>` : ''}
   </section>`;
 }
@@ -1124,6 +1164,9 @@ function bindIntelBar(rerender) {
   q.onkeydown = (e) => { if (e.key === 'Enter' && list[0]) location.hash = list[0].href; if (e.key === 'Escape') { q.value = ''; box.hidden = true; } };
   const g = $('#igroup');
   if (g) g.onchange = () => { intelSel.group = g.value; rerender(); };
+  const sv = $('#iserver');
+  if (sv) sv.onchange = () => { intelSel.server = sv.value; if (sv.value !== 'ALL') intelSel.group = 'ALL'; rerender(); };
+  app.querySelectorAll('[data-iserver]').forEach((b) => (b.onclick = () => { intelSel.server = b.dataset.iserver; intelSel.group = 'ALL'; rerender(); }));
 }
 // ---------- Patch history: every change the game files show, patch after patch, since 10.1 (January 2020) ----------
 let patchData, patchLoad = 'idle';
@@ -1280,21 +1323,22 @@ function viewIntel(arg = '') {
   const opps = file ? Object.entries(file.mu || {}).sort((a, b) => b[1].n - a[1].n).map(([c]) => c) : [];
   const opp = tab === 'counters' ? (oppArg !== 'counters' && opps.includes(oppArg) ? oppArg : opps[0]) : null;
   intelSel = { ...intelSel, champ: champArg, role, opp };
-  const G = file && (file.groups[intelSel.group] || file.groups.ALL);
+  const G = file && file.groups[gKey()];
+  const dsv = diffServers(pair);
   app.innerHTML = `${intelHead()}
   ${intelBar({ c: champArg, r: role, o: tab === 'counters' ? (opp || true) : null })}
-  <section class="ichead">${portrait(champArg)}<div class="ichead-main"><p class="eyebrow">${GROUP_NAMES[intelSel.group]}</p><h2>${champName(champArg)} <span class="muted">${ROLES[role]}</span></h2></div>
-    ${G ? `<div class="ichead-nums"><div><span>Win rate</span><b class="${wrCls(G.w / G.n)}">${pct(G.w / G.n)}</b></div><div><span>Pick rate</span><b>${(G.pick * 100).toFixed(G.pick < 0.01 ? 2 : 1)}%</b></div><div><span>Ban rate</span><b>${((intelIndex.bans[champArg] ?? 0) * 100).toFixed(1)}%</b></div><div><span>Games</span><b>${G.n.toLocaleString('en-GB')}</b></div></div>` : ''}
+  <section class="ichead">${portrait(champArg)}<div class="ichead-main"><p class="eyebrow">${gName()}</p><h2>${champName(champArg)} <span class="muted">${ROLES[role]}</span></h2>${dsv.length ? `<p class="idiff-flag"><span title="The build is not the same everywhere: see Built differently on some servers, in the build">≠ Built differently on</span> ${dsv.map((x) => `<button class="chip small${intelSel.server === x ? ' on' : ''}" data-iserver="${x}">${x}</button>`).join('')}</p>` : ''}</div>
+    ${G ? `<div class="ichead-nums"><div><span>Win rate</span><b class="${wrCls(G.w / G.n)}">${pct(G.w / G.n)}</b></div><div><span>Pick rate</span><b>${(G.pick * 100).toFixed(G.pick < 0.01 ? 2 : 1)}%</b></div><div><span>Ban rate</span><b>${(banOf(champArg) * 100).toFixed(1)}%</b></div><div><span>Games</span><b>${G.n.toLocaleString('en-GB')}</b></div></div>` : ''}
   </section>
   <nav class="itabs">${[['build', 'Build', base], ['counters', 'Counters', `${base}/counters`], ['patches', 'Patches', `${base}/patches`]].map(([k, n, h]) => `<a class="${tab === k ? 'on' : ''}" href="${h}">${n}</a>`).join('')}</nav>
-  <div id="intel-body">${!ready ? '<p class="muted">Loading…</p>' : !file ? '<p class="muted">Too few games with this champion and role in our data.</p>' : tab === 'build' ? intelBody(pair, file) : tab === 'patches' ? (withPatches(again) ? `<div class="pmain solo">${patchChart(champArg, pair)}${champHistory(champArg, pair)}${patchNote}</div>` : '<p class="muted">Loading the patches…</p>') : countersTab(pair, file, opp, opps, base)}</div>
+  <div id="intel-body">${!ready ? '<p class="muted">Loading…</p>' : !file ? '<p class="muted">Too few games with this champion and role in our data.</p>' : !G && tab === 'build' ? `<p class="muted">Too few games of ${champName(champArg)} ${ROLES[role]} ${intelSel.server !== 'ALL' ? `on ${intelSel.server}` : 'in this league'}. Choose World or another server.</p>` : tab === 'build' ? intelBody(pair, file) : tab === 'patches' ? (withPatches(again) ? `<div class="pmain solo">${patchChart(champArg, pair)}${champHistory(champArg, pair)}${patchNote}</div>` : '<p class="muted">Loading the patches…</p>') : countersTab(pair, file, opp, opps, base)}</div>
   ${contestNudge(`Studied ${champName(champArg)}? Put it to the test.`, 'Enter your next solo queue game in a contest: free training contests, or prize contests with 3 challenges.', '#/contests')}`;
   bindIntelBar(() => { const y = scrollY; viewIntel(arg); scrollTo(0, y); });
   app.querySelectorAll('[data-iopp]').forEach((b) => (b.onclick = () => { location.hash = `${base}/${encodeURIComponent(b.dataset.iopp)}`; }));
   const cq = $('#cq'), cl = $('#clist');
   if (cq && cl) cq.oninput = () => { const q = plainName(cq.value); cl.querySelectorAll('a').forEach((a) => (a.hidden = !a.dataset.name.startsWith(q))); };
 }
-const intelHead = () => `<div class="route-title"><p class="eyebrow">Study the game</p><h1>Intelligence</h1><p>Builds, matchups and the numbers of every champion, from ${(intelIndex?.matches || D.facts.games).toLocaleString('en-GB')} ranked games on EUW.</p></div>`;
+const intelHead = () => `<div class="route-title"><p class="eyebrow">Study the game</p><h1>Intelligence</h1><p>Builds, matchups and the numbers of every champion, from ${(intelIndex?.matches || D.facts.games).toLocaleString('en-GB')} ranked games on ${serverList().length || 15} servers.</p></div>`;
 let tlRole = '';
 /** Tier of a champion and role: its win rate pulled towards 50% when it has few games, and a minimum of play. */
 const tierOf = (n, w, pick) => { const s = (w + 100) / (n + 200); if (pick < 0.005) return 5; const t = s >= 0.52 ? 1 : s >= 0.51 ? 2 : s >= 0.5 ? 3 : s >= 0.49 ? 4 : 5; return pick < 0.01 ? Math.max(3, t) : t; }; // tiers 1 and 2 need 1% of the role's games
@@ -1303,7 +1347,7 @@ function intelStart() {
   const pairs = intelIndex.pairs;
   const champs = [...new Set(Object.keys(pairs).map((p) => splitPair(p).champ))].sort((a, b) => champName(a).localeCompare(champName(b)));
   const rolesOf = (c) => Object.keys(ROLES).filter((r) => (pairs[`${r}|${c}`]?.n || 0) >= 30);
-  const g = intelSel.group;
+  const g = gKey();
   const rows = Object.entries(pairs).map(([pair, x]) => { const [n, w, pick] = x.groups[g] || [0, 0, 0]; return { pair, n, w, pick: pick ?? x.pick, weak: x.weak || [] }; })
     .filter((r) => r.n >= 100 && (!tlRole || splitPair(r.pair).role === tlRole))
     .map((r) => ({ ...r, s: (r.w + 100) / (r.n + 200), tier: tierOf(r.n, r.w, r.pick) }))
@@ -1313,14 +1357,14 @@ function intelStart() {
   <nav class="itabs"><a class="on" href="#/intel">Tier list</a><a href="#/intel/patches">Patch history</a></nav>
   <div class="istart one">
     <section class="itier"><div class="itier-tabs">${[['', 'All'], ...Object.entries(ROLES)].map(([r, n]) => `<button class="${tlRole === r ? 'on' : ''}" data-tlrole="${r}">${n}</button>`).join('')}</div>
-      <div class="chips">${Object.entries(GROUP_NAMES).map(([k, n]) => `<button class="chip ${k === g ? 'on' : ''}" data-igroup="${k}">${n}</button>`).join('')}</div>
+      <div class="ifilters">${serverSelect()}<div class="chips">${Object.entries(GROUP_NAMES).map(([k, n]) => `<button class="chip ${k === g ? 'on' : ''}" data-igroup="${k}" ${intelSel.server !== 'ALL' ? 'disabled title="Leagues are split on the whole world only"' : ''}>${n}</button>`).join('')}</div></div>
       <div class="tablewrap tscroll"><table class="num tiers"><tr><th>#</th><th>Champion</th><th>Tier</th><th>Role</th><th>Win rate</th><th>Pick rate</th><th>Ban rate</th><th>Weak against</th></tr>
-      ${rows.map((r, i) => { const { role, champ } = splitPair(r.pair); return `<tr class="trow-link" data-go="#/intel/${encodeURIComponent(champ)}/${role}"><td class="muted">${i + 1}</td><td class="gchamp">${icon(champ)}<span><b>${champName(champ)}</b></span></td><td><b class="tier t${r.tier}">${r.tier}</b></td><td class="muted">${ROLES[role]}</td><td class="${wrCls(r.w / r.n)}">${(r.w / r.n * 100).toFixed(2)}%</td><td>${(r.pick * 100).toFixed(2)}%</td><td>${((intelIndex.bans[champ] ?? 0) * 100).toFixed(2)}%</td><td class="weak">${r.weak.map(([c, n, w]) => `<span title="${champName(c)}: ${pct(w / n)} over ${n} games">${icon(c)}</span>`).join('')}</td></tr>`; }).join('')}</table></div>
-      <p class="small muted">Tier: the win rate, pulled towards 50% when there are few games, with a minimum of play. ${rows.length} champions and roles with 100 games or more.</p></section>
+      ${rows.map((r, i) => { const { role, champ } = splitPair(r.pair); return `<tr class="trow-link" data-go="#/intel/${encodeURIComponent(champ)}/${role}"><td class="muted">${i + 1}</td><td class="gchamp">${icon(champ)}<span><b>${champName(champ)}</b>${diffServers(r.pair).length ? `<small class="idiff-mark" title="Built differently on ${diffServers(r.pair).join(', ')}">≠ ${diffServers(r.pair).join(' ')}</small>` : ''}</span></td><td><b class="tier t${r.tier}">${r.tier}</b></td><td class="muted">${ROLES[role]}</td><td class="${wrCls(r.w / r.n)}">${(r.w / r.n * 100).toFixed(2)}%</td><td>${(r.pick * 100).toFixed(2)}%</td><td>${(banOf(champ) * 100).toFixed(2)}%</td><td class="weak">${r.weak.map(([c, n, w]) => `<span title="${champName(c)}: ${pct(w / n)} over ${n} games">${icon(c)}</span>`).join('')}</td></tr>`; }).join('')}</table></div>
+      <p class="small muted">Tier: the win rate, pulled towards 50% when there are few games, with a minimum of play. ${rows.length} champions and roles with 100 games or more. ≠ marks a champion built differently on a server.</p></section>
   </div>
   ${contestNudge('Know the game? Prove it.', 'Enter your next solo queue game in a contest: free training contests, or prize contests with 3 challenges.', '#/contests')}`;
-  bindIntelBar(() => {});
   const keep = () => { const y = scrollY; intelStart(); scrollTo(0, y); };
+  bindIntelBar(keep);
   app.querySelectorAll('[data-tlrole]').forEach((b) => (b.onclick = () => { tlRole = b.dataset.tlrole; keep(); }));
   app.querySelectorAll('[data-igroup]').forEach((b) => (b.onclick = () => { intelSel.group = b.dataset.igroup; keep(); }));
   app.querySelectorAll('[data-go]').forEach((tr) => (tr.onclick = () => { location.hash = tr.dataset.go; }));
@@ -1375,10 +1419,10 @@ function matchupDetail(pair, file, opp) {
       </div></section>`;
 }
 function intelBody(pair, file) {
-  const champ = champName(splitPair(pair).champ), gname = GROUP_NAMES[intelSel.group];
-  const G = file.groups[intelSel.group] || file.groups.ALL;
+  const champ = champName(splitPair(pair).champ), gname = gName();
+  const G = file.groups[gKey()];
   if (!G) return '<p class="muted">Too few games.</p>';
-  const ban = intelIndex.bans[splitPair(pair).champ] ?? 0;
+  const ban = banOf(splitPair(pair).champ);
   const tiers = intelIndex.pairs[pair].groups;
   const dmg = G.dmg;
   const k = (key) => key.split('.').map(Number);
@@ -1410,9 +1454,11 @@ function intelBody(pair, file) {
     <section class="icard"><h3>Counters <span class="small muted">· lane opponents, 15+ games</span></h3><div class="icounters"><div><h4 class="down">Hardest</h4>${hard.map(cRow).join('')}</div><div><h4 class="up">Easiest</h4>${easy.map(cRow).join('')}</div></div></section>
     <section class="icard"><h3>Best teammates</h3>${mates.map(([r, l]) => `<div class="imates"><span class="lbl">${ROLES[r]}</span>${l.map((m) => `<span class="imate">${icon(m.c)}<b class="${wrCls(m.w)}">${pct(m.w)}</b><small>${m.n}</small></span>`).join('')}</div>`).join('') || '<p class="small muted">Too few games.</p>'}
       <h3>Win rate by game length</h3>${G.len.map(([l, n, w]) => `<div class="ilen"><span>${l} min</span>${n ? bar(w / n) : '<span class="ibar"></span>'}<b class="${n ? wrCls(w / n) : ''}">${n ? pct(w / n) : '—'}</b><small>${n}</small></div>`).join('')}
-      <h3>Win rate by tier</h3>${Object.entries(tiers).filter(([g]) => g !== 'ALL').map(([g, [n, w]]) => `<div class="ilen"><span>${GROUP_NAMES[g]}</span>${n >= 10 ? bar(w / n) : '<span class="ibar"></span>'}<b class="${n >= 10 ? wrCls(w / n) : ''}">${n >= 10 ? pct(w / n) : '—'}</b><small>${n}</small></div>`).join('')}</section>
+      <h3>Win rate by league <span class="small muted">· world</span></h3>${Object.keys(GROUP_NAMES).filter((g) => g !== 'ALL' && tiers[g]).map((g) => [g, tiers[g]]).map(([g, [n, w]]) => `<div class="ilen"><span>${GROUP_NAMES[g]}</span>${n >= 10 ? bar(w / n) : '<span class="ibar"></span>'}<b class="${n >= 10 ? wrCls(w / n) : ''}">${n >= 10 ? pct(w / n) : '—'}</b><small>${n}</small></div>`).join('')}
+      <h3>Win rate by server</h3>${Object.entries(tiers).filter(([g]) => g.startsWith('@')).sort((a, b) => b[1][0] - a[1][0]).map(([g, [n, w]]) => `<div class="ilen"><span title="${SERVER_FULL[g.slice(1)] || ''}">${g.slice(1)}</span>${n >= 30 ? bar(w / n) : '<span class="ibar"></span>'}<b class="${n >= 30 ? wrCls(w / n) : ''}">${n >= 30 ? pct(w / n) : '—'}</b><small>${n}</small></div>`).join('')}</section>
+    ${diffSection(pair)}
   </div>
-  <p class="small muted">Every number comes with the games behind it. Recent patches, EUW ranked solo. With Riot's production key: one patch at a time and many more games.</p>`;
+  <p class="small muted">Every number comes with the games behind it. Recent patches, ranked solo on every server: EUW has the most games, so it weighs most in the world numbers. With Riot's production key: one patch at a time and many more games.</p>`;
 }
 /** Champion against champion: the lane, what the winners do differently, and the build against it. */
 function matchupSection(pair, file) {
